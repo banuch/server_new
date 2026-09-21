@@ -90,5 +90,6 @@ test('logs and persists fragmented and coalesced packets without printing conten
     assert.equal(files.some((file) => file.startsWith('errors-')), false);
     assert.equal(terminalLines.some((line) => line.includes('[PACKET] Saved')), true);
     assert.equal(terminalLines.some((line) => line.includes('"value":10')), false);
-    assert.equal(terminalLines.some((line) => line.includes('not-json')), false);
+    assert.equal(terminalLines.some((line) => line.includes('[REJECTED PAYLOAD]')), true);
+    assert.equal(terminalLines.some((line) => line.includes('not-json')), true);
 });

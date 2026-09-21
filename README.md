@@ -13,8 +13,9 @@ Each packet must be one line followed by a newline (`\n`):
 
 The server writes the raw line to disk, validates the JSON packet, and stores its
 data in normalized MySQL tables. It returns a success acknowledgement only after
-both the file write and MySQL transaction complete. Packet content is never
-printed in the server terminal.
+both the file write and MySQL transaction complete. Successful packet content is
+not printed in the terminal. Rejected payloads are printed with their validation
+error to help diagnose malformed device JSON.
 
 ## Run
 
@@ -65,8 +66,8 @@ template to commit.
 
 Every log line includes the server receive time, client address, byte count, and
 the complete raw packet in the `raw` property. The terminal displays only a
-short confirmation containing the timestamp, client address, and byte count.
-Dates in filenames and timestamps use UTC.
+short confirmation for successful packets. For rejected packets, it displays the
+error and complete rejected payload. Dates in filenames and timestamps use UTC.
 
 ## MySQL startup and storage
 

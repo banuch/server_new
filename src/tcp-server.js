@@ -58,7 +58,12 @@ function createTcpServer(config, packetLogger, packetStore, output = console) {
             const saved = await packetStore.savePacket(record);
 
             if (saved.status === 'invalid') {
-                output.error(`[PACKET] Rejected ${event.data.length} bytes from ${clientLabel}; receipt=${saved.receiptId}`);
+                output.error(
+                    `[PACKET] Rejected ${event.data.length} bytes from ${clientLabel}; `
+                    + `receipt=${saved.receiptId}; error=${saved.error}`,
+                );
+                output.error('[REJECTED PAYLOAD]');
+                output.error(raw);
                 sendJson(socket, {
                     status: 'error',
                     code: 'INVALID_PACKET',
