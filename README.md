@@ -1,19 +1,19 @@
 # AMR DLMS TCP Server
 
-Dependency-free Node.js TCP server for receiving newline-delimited JSON (NDJSON)
+Dependency-free Node.js TCP server for receiving and logging newline-delimited
 packets from ESP32-based AMR devices.
 
 ## Protocol
 
-Each packet must be one JSON object followed by a newline (`\n`):
+Each packet must be one line followed by a newline (`\n`):
 
 ```text
 {"deviceId":"ESP32-AMR-001","voltage":230.4}\n
 ```
 
-The server returns one newline-delimited JSON acknowledgement for every packet.
-An acknowledgement is sent only after the packet or error has been written to
-disk.
+The server treats packet contents as raw text. It does not parse, validate, or
+transform JSON. It returns one newline-delimited JSON acknowledgement for every
+complete line, only after that raw line has been written to disk.
 
 ## Run
 
@@ -53,15 +53,11 @@ template to commit.
 ## Logs
 
 - Valid packets: `logs/dlms-YYYY-MM-DD.ndjson`
-- Invalid packets: `logs/errors-YYYY-MM-DD.ndjson`
+- Oversized or connection-truncated packets: `logs/errors-YYYY-MM-DD.ndjson`
 
 Every log line includes the server receive time, client address, byte count, and
-the complete packet. Dates in filenames and timestamps use UTC.
-
-For schema `2.0.0` packets, the terminal also prints a labeled DLMS summary with
-device identity, cycle information, phase measurements, power, energy, maximum
-demand, TOU zones, profile counts, event counts, and device/modem health. The
-full JSON is printed after the summary and remains unchanged in the packet log.
+the complete raw packet in the `raw` property. The terminal displays the same
+raw packet. Dates in filenames and timestamps use UTC.
 
 ## Test
 

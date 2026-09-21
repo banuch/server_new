@@ -2,22 +2,12 @@
 
 const net = require('net');
 const { LineFramer } = require('./line-framer');
-const { extractDlmsSummary, formatDlmsSummary } = require('./dlms-parser');
 
 function connectionDetails(socket) {
     return {
         clientIp: socket.remoteAddress || null,
         clientPort: socket.remotePort || null,
     };
-}
-
-function packetDeviceId(packet) {
-    return packet.deviceId
-        || packet.meterId
-        || packet.device_id
-        || packet?.device?.device_id
-        || packet?.readings?.meta?.device_id
-        || null;
 }
 
 function sendJson(socket, message) {
@@ -58,44 +48,18 @@ function createTcpServer(config, packetLogger, output = console) {
             }
 
             const raw = event.data.toString('utf8');
-            let packet;
-
-            try {
-                packet = JSON.parse(raw);
-                if (packet === null || Array.isArray(packet) || typeof packet !== 'object') {
-                    throw new Error('top-level JSON value must be an object');
-                }
-            } catch (error) {
-                await packetLogger.logError({
-                    receivedAt,
-                    ...client,
-                    bytes: event.data.length,
-                    reason: error.message,
-                    raw,
-                });
-                output.error(`[TCP] Invalid JSON from ${clientLabel}: ${error.message}`);
-                sendJson(socket, { status: 'error', code: 'INVALID_JSON', message: error.message });
-                return;
-            }
-
-            const deviceId = packetDeviceId(packet);
             await packetLogger.logPacket({
                 receivedAt,
                 ...client,
                 bytes: event.data.length,
-                deviceId,
-                packet,
+                raw,
             });
 
             output.log(`\n[PACKET] ${receivedAt} from ${clientLabel} (${event.data.length} bytes)`);
-            const summary = extractDlmsSummary(packet);
-            for (const line of formatDlmsSummary(summary)) output.log(line);
-            output.log('[FULL JSON]');
-            output.log(JSON.stringify(packet, null, 2));
+            output.log(raw);
 
             sendJson(socket, {
                 status: 'success',
-                deviceId,
                 receivedAt,
                 bytes: event.data.length,
             });

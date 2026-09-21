@@ -31,7 +31,7 @@ function collectLines(socket, expected) {
     });
 }
 
-test('logs fragmented and coalesced packets and rejects malformed JSON', async () => {
+test('logs fragmented and coalesced lines without parsing their contents', async () => {
     const logDir = await fs.mkdtemp(path.join(os.tmpdir(), 'amr-server-'));
     const logger = new PacketLogger(logDir);
     const app = createTcpServer({
@@ -49,8 +49,7 @@ test('logs fragmented and coalesced packets and rejects malformed JSON', async (
     socket.write('32-1","value":10}\n{"deviceId":"ESP32-2"}\nnot-json\n');
 
     const responses = await responsesPromise;
-    assert.deepEqual(responses.map((item) => item.status), ['success', 'success', 'error']);
-    assert.equal(responses[2].code, 'INVALID_JSON');
+    assert.deepEqual(responses.map((item) => item.status), ['success', 'success', 'success']);
 
     socket.end();
     await new Promise((resolve) => socket.once('close', resolve));
@@ -58,13 +57,11 @@ test('logs fragmented and coalesced packets and rejects malformed JSON', async (
 
     const files = await fs.readdir(logDir);
     const packetFile = files.find((file) => file.startsWith('dlms-'));
-    const errorFile = files.find((file) => file.startsWith('errors-'));
     const packetLines = (await fs.readFile(path.join(logDir, packetFile), 'utf8')).trim().split('\n');
-    const errorLines = (await fs.readFile(path.join(logDir, errorFile), 'utf8')).trim().split('\n');
 
-    assert.equal(packetLines.length, 2);
-    assert.equal(JSON.parse(packetLines[0]).packet.deviceId, 'ESP32-1');
-    assert.equal(JSON.parse(packetLines[1]).packet.deviceId, 'ESP32-2');
-    assert.equal(errorLines.length, 1);
-    assert.equal(JSON.parse(errorLines[0]).raw, 'not-json');
+    assert.equal(packetLines.length, 3);
+    assert.equal(JSON.parse(packetLines[0]).raw, '{"deviceId":"ESP32-1","value":10}');
+    assert.equal(JSON.parse(packetLines[1]).raw, '{"deviceId":"ESP32-2"}');
+    assert.equal(JSON.parse(packetLines[2]).raw, 'not-json');
+    assert.equal(files.some((file) => file.startsWith('errors-')), false);
 });

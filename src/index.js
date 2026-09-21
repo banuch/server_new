@@ -16,7 +16,7 @@ async function main() {
 
     console.log(`[APP] AMR TCP server listening on ${config.host}:${config.port}`);
     console.log(`[APP] Packet logs: ${config.logDir}`);
-    console.log(`[APP] Protocol: one JSON object per line`);
+    console.log(`[APP] Protocol: one raw packet per line`);
 
     let shuttingDown = false;
     async function shutdown(signal) {
