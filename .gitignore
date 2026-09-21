@@ -1,4 +1,10 @@
 node_modules/
 logs/
+
+# Local configuration may contain deployment-specific values.
 .env
+.env.*
+!.env.example
+
+# Node.js diagnostic output
 npm-debug.log*
