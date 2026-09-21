@@ -58,6 +58,11 @@ template to commit.
 Every log line includes the server receive time, client address, byte count, and
 the complete packet. Dates in filenames and timestamps use UTC.
 
+For schema `2.0.0` packets, the terminal also prints a labeled DLMS summary with
+device identity, cycle information, phase measurements, power, energy, maximum
+demand, TOU zones, profile counts, event counts, and device/modem health. The
+full JSON is printed after the summary and remains unchanged in the packet log.
+
 ## Test
 
 Run automated tests:

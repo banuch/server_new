@@ -2,6 +2,7 @@
 
 const net = require('net');
 const { LineFramer } = require('./line-framer');
+const { extractDlmsSummary, formatDlmsSummary } = require('./dlms-parser');
 
 function connectionDetails(socket) {
     return {
@@ -14,6 +15,7 @@ function packetDeviceId(packet) {
     return packet.deviceId
         || packet.meterId
         || packet.device_id
+        || packet?.device?.device_id
         || packet?.readings?.meta?.device_id
         || null;
 }
@@ -86,6 +88,9 @@ function createTcpServer(config, packetLogger, output = console) {
             });
 
             output.log(`\n[PACKET] ${receivedAt} from ${clientLabel} (${event.data.length} bytes)`);
+            const summary = extractDlmsSummary(packet);
+            for (const line of formatDlmsSummary(summary)) output.log(line);
+            output.log('[FULL JSON]');
             output.log(JSON.stringify(packet, null, 2));
 
             sendJson(socket, {
