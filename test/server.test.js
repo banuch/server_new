@@ -9,8 +9,6 @@ const net = require('net');
 const { PacketLogger } = require('../src/packet-logger');
 const { createTcpServer } = require('../src/tcp-server');
 
-const quietOutput = { log() {}, error() {} };
-
 function collectLines(socket, expected) {
     return new Promise((resolve, reject) => {
         let buffer = '';
@@ -34,10 +32,15 @@ function collectLines(socket, expected) {
 test('logs fragmented and coalesced lines without parsing their contents', async () => {
     const logDir = await fs.mkdtemp(path.join(os.tmpdir(), 'amr-server-'));
     const logger = new PacketLogger(logDir);
+    const terminalLines = [];
+    const output = {
+        log(message) { terminalLines.push(message); },
+        error(message) { terminalLines.push(message); },
+    };
     const app = createTcpServer({
         maxPacketBytes: 1024,
         idleTimeoutMs: 5_000,
-    }, logger, quietOutput);
+    }, logger, output);
 
     await new Promise((resolve) => app.server.listen(0, '127.0.0.1', resolve));
     const address = app.server.address();
@@ -64,4 +67,7 @@ test('logs fragmented and coalesced lines without parsing their contents', async
     assert.equal(JSON.parse(packetLines[1]).raw, '{"deviceId":"ESP32-2"}');
     assert.equal(JSON.parse(packetLines[2]).raw, 'not-json');
     assert.equal(files.some((file) => file.startsWith('errors-')), false);
+    assert.equal(terminalLines.some((line) => line.includes('[PACKET] Logged')), true);
+    assert.equal(terminalLines.some((line) => line.includes('ESP32-1')), false);
+    assert.equal(terminalLines.some((line) => line.includes('not-json')), false);
 });

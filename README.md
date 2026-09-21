@@ -13,7 +13,8 @@ Each packet must be one line followed by a newline (`\n`):
 
 The server treats packet contents as raw text. It does not parse, validate, or
 transform JSON. It returns one newline-delimited JSON acknowledgement for every
-complete line, only after that raw line has been written to disk.
+complete line, only after that raw line has been written to disk. Packet content
+is never printed in the server terminal.
 
 ## Run
 
@@ -56,8 +57,9 @@ template to commit.
 - Oversized or connection-truncated packets: `logs/errors-YYYY-MM-DD.ndjson`
 
 Every log line includes the server receive time, client address, byte count, and
-the complete raw packet in the `raw` property. The terminal displays the same
-raw packet. Dates in filenames and timestamps use UTC.
+the complete raw packet in the `raw` property. The terminal displays only a
+short confirmation containing the timestamp, client address, and byte count.
+Dates in filenames and timestamps use UTC.
 
 ## Test
 

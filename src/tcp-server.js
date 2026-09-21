@@ -55,8 +55,7 @@ function createTcpServer(config, packetLogger, output = console) {
                 raw,
             });
 
-            output.log(`\n[PACKET] ${receivedAt} from ${clientLabel} (${event.data.length} bytes)`);
-            output.log(raw);
+            output.log(`[PACKET] Logged ${event.data.length} bytes from ${clientLabel} at ${receivedAt}`);
 
             sendJson(socket, {
                 status: 'success',
