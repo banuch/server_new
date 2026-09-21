@@ -29,9 +29,24 @@ function collectLines(socket, expected) {
     });
 }
 
-test('logs fragmented and coalesced lines without parsing their contents', async () => {
+test('logs and persists fragmented and coalesced packets without printing contents', async () => {
     const logDir = await fs.mkdtemp(path.join(os.tmpdir(), 'amr-server-'));
     const logger = new PacketLogger(logDir);
+    const storedPackets = [];
+    const packetStore = {
+        async savePacket(record) {
+            storedPackets.push(record.raw);
+            if (record.raw === 'not-json') {
+                return { status: 'invalid', receiptId: 3, error: 'invalid JSON' };
+            }
+            return {
+                status: 'success',
+                receiptId: storedPackets.length,
+                deviceId: `ESP32-${storedPackets.length}`,
+                deviceCycleId: storedPackets.length,
+            };
+        },
+    };
     const terminalLines = [];
     const output = {
         log(message) { terminalLines.push(message); },
@@ -40,7 +55,7 @@ test('logs fragmented and coalesced lines without parsing their contents', async
     const app = createTcpServer({
         maxPacketBytes: 1024,
         idleTimeoutMs: 5_000,
-    }, logger, output);
+    }, logger, packetStore, output);
 
     await new Promise((resolve) => app.server.listen(0, '127.0.0.1', resolve));
     const address = app.server.address();
@@ -52,7 +67,8 @@ test('logs fragmented and coalesced lines without parsing their contents', async
     socket.write('32-1","value":10}\n{"deviceId":"ESP32-2"}\nnot-json\n');
 
     const responses = await responsesPromise;
-    assert.deepEqual(responses.map((item) => item.status), ['success', 'success', 'success']);
+    assert.deepEqual(responses.map((item) => item.status), ['success', 'success', 'error']);
+    assert.equal(responses[2].code, 'INVALID_PACKET');
 
     socket.end();
     await new Promise((resolve) => socket.once('close', resolve));
@@ -66,8 +82,13 @@ test('logs fragmented and coalesced lines without parsing their contents', async
     assert.equal(JSON.parse(packetLines[0]).raw, '{"deviceId":"ESP32-1","value":10}');
     assert.equal(JSON.parse(packetLines[1]).raw, '{"deviceId":"ESP32-2"}');
     assert.equal(JSON.parse(packetLines[2]).raw, 'not-json');
+    assert.deepEqual(storedPackets, [
+        '{"deviceId":"ESP32-1","value":10}',
+        '{"deviceId":"ESP32-2"}',
+        'not-json',
+    ]);
     assert.equal(files.some((file) => file.startsWith('errors-')), false);
-    assert.equal(terminalLines.some((line) => line.includes('[PACKET] Logged')), true);
-    assert.equal(terminalLines.some((line) => line.includes('ESP32-1')), false);
+    assert.equal(terminalLines.some((line) => line.includes('[PACKET] Saved')), true);
+    assert.equal(terminalLines.some((line) => line.includes('"value":10')), false);
     assert.equal(terminalLines.some((line) => line.includes('not-json')), false);
 });

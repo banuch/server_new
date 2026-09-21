@@ -15,7 +15,7 @@ function sendJson(socket, message) {
     socket.write(`${JSON.stringify(message)}\n`);
 }
 
-function createTcpServer(config, packetLogger, output = console) {
+function createTcpServer(config, packetLogger, packetStore, output = console) {
     const sockets = new Set();
 
     const server = net.createServer((socket) => {
@@ -48,17 +48,36 @@ function createTcpServer(config, packetLogger, output = console) {
             }
 
             const raw = event.data.toString('utf8');
-            await packetLogger.logPacket({
+            const record = {
                 receivedAt,
                 ...client,
                 bytes: event.data.length,
                 raw,
-            });
+            };
+            await packetLogger.logPacket(record);
+            const saved = await packetStore.savePacket(record);
 
-            output.log(`[PACKET] Logged ${event.data.length} bytes from ${clientLabel} at ${receivedAt}`);
+            if (saved.status === 'invalid') {
+                output.error(`[PACKET] Rejected ${event.data.length} bytes from ${clientLabel}; receipt=${saved.receiptId}`);
+                sendJson(socket, {
+                    status: 'error',
+                    code: 'INVALID_PACKET',
+                    receiptId: saved.receiptId,
+                    message: saved.error,
+                });
+                return;
+            }
+
+            output.log(
+                `[PACKET] Saved device=${saved.deviceId} cycle=${saved.deviceCycleId} `
+                + `bytes=${event.data.length} receipt=${saved.receiptId}`,
+            );
 
             sendJson(socket, {
                 status: 'success',
+                deviceId: saved.deviceId,
+                cycleId: saved.deviceCycleId,
+                receiptId: saved.receiptId,
                 receivedAt,
                 bytes: event.data.length,
             });
@@ -76,7 +95,7 @@ function createTcpServer(config, packetLogger, output = console) {
                 })
                 .catch((error) => {
                     output.error(`[TCP] Processing failed for ${clientLabel}: ${error.message}`);
-                    sendJson(socket, { status: 'error', code: 'LOG_WRITE_FAILED' });
+                    sendJson(socket, { status: 'error', code: 'PERSISTENCE_FAILED' });
                 })
                 .finally(() => {
                     if (!socket.destroyed) socket.resume();

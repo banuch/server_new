@@ -61,6 +61,14 @@ function loadConfig() {
         logDir: path.resolve(process.env.LOG_DIR || path.join(__dirname, '..', 'logs')),
         maxPacketBytes: positiveInteger('MAX_PACKET_BYTES', 256 * 1024),
         idleTimeoutMs: positiveInteger('IDLE_TIMEOUT_MS', 120_000),
+        mysql: {
+            host: process.env.DB_HOST || '127.0.0.1',
+            port: positiveInteger('DB_PORT', 3306),
+            user: process.env.DB_USER || 'root',
+            password: process.env.DB_PASSWORD || '',
+            database: process.env.DB_NAME || 'amr_tcp_server',
+            connectionLimit: positiveInteger('DB_CONNECTION_LIMIT', 10),
+        },
     };
 }
 
