@@ -5,6 +5,15 @@ const { PacketLogger } = require('./packet-logger');
 const { createTcpServer } = require('./tcp-server');
 const { MysqlDatabase } = require('./database/mysql-database');
 const { PacketRepository } = require('./database/packet-repository');
+const { DashboardRepository } = require('./database/dashboard-repository');
+const { createWebServer } = require('./web-server');
+
+function listen(server, port, host) {
+    return new Promise((resolve, reject) => {
+        server.once('error', reject);
+        server.listen(port, host, resolve);
+    });
+}
 
 async function main() {
     const config = loadConfig();
@@ -12,16 +21,17 @@ async function main() {
     const database = new MysqlDatabase(config.mysql);
     await database.initialize();
     const packetStore = new PacketRepository(database);
-    const app = createTcpServer(config, packetLogger, packetStore);
+    const dashboardStore = new DashboardRepository(database);
+    const tcpApp = createTcpServer(config, packetLogger, packetStore);
+    const webApp = createWebServer(dashboardStore);
 
-    await new Promise((resolve, reject) => {
-        app.server.once('error', reject);
-        app.server.listen(config.port, config.host, resolve);
-    });
+    await listen(tcpApp.server, config.port, config.host);
+    await listen(webApp.server, config.webPort, config.webHost);
 
     console.log(`[APP] AMR TCP server listening on ${config.host}:${config.port}`);
     console.log(`[APP] Packet logs: ${config.logDir}`);
     console.log(`[APP] Protocol: one schema 2.1.0 JSON packet per line`);
+    console.log(`[WEB] Dashboard: http://${config.webHost}:${config.webPort}`);
 
     let shuttingDown = false;
     async function shutdown(signal) {
@@ -30,7 +40,7 @@ async function main() {
         console.log(`[APP] ${signal} received; shutting down`);
 
         try {
-            await app.close();
+            await Promise.all([tcpApp.close(), webApp.close()]);
             await database.close();
             process.exitCode = 0;
         } catch (error) {

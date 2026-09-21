@@ -76,6 +76,11 @@ class MysqlDatabase {
         return this.pool.getConnection();
     }
 
+    execute(sql, values = []) {
+        if (!this.pool) throw new Error('database is not initialized');
+        return this.pool.execute(sql, values);
+    }
+
     async close() {
         if (!this.pool) return;
         await this.pool.end();

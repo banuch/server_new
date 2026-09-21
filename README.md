@@ -1,7 +1,25 @@
 # AMR DLMS TCP Server
 
-Node.js TCP server for receiving, logging, parsing, and persistently storing
-newline-delimited schema `2.1.0` packets from ESP32-based AMR devices.
+Single Node.js application for receiving, logging, parsing, and persistently
+storing newline-delimited schema `2.1.0` packets from ESP32-based AMR devices.
+It also provides a read-only web dashboard and REST API for the stored data.
+
+## Dashboard
+
+After startup, open `http://localhost:3000`. The dashboard includes:
+
+- summary cards for today's packet count, devices active during the last hour,
+  and the most recently received packet;
+- hourly or daily charts for voltage, current, active power, and energy;
+- per-device chart selection and average/sum aggregation;
+- a paginated packet ledger with device, meter serial, date-range, and text
+  filters;
+- a raw JSON viewer for each receipt; and
+- optional automatic refresh every 30 seconds.
+
+The dashboard reads the existing normalized tables and never modifies packet
+data. Chart.js is served locally with the application, so the dashboard does
+not depend on a public CDN.
 
 ## Protocol
 
@@ -36,6 +54,7 @@ Configuration is read from the local `.env` file. To use another port, edit:
 
 ```dotenv
 TCP_PORT=5000
+WEB_PORT=3000
 ```
 
 The available settings are:
@@ -46,6 +65,9 @@ TCP_PORT=5000
 MAX_PACKET_BYTES=262144
 IDLE_TIMEOUT_MS=120000
 # LOG_DIR=C:\amr-logs
+
+WEB_HOST=0.0.0.0
+WEB_PORT=3000
 
 DB_HOST=127.0.0.1
 DB_PORT=3306
@@ -58,6 +80,31 @@ DB_CONNECTION_LIMIT=10
 Operating-system environment variables override matching values in `.env`.
 The local `.env` is ignored by Git; `.env.example` is the safe configuration
 template to commit.
+
+Install and run the complete app with:
+
+```powershell
+npm install
+# Copy .env.example to .env and enter the MySQL credentials.
+npm start
+```
+
+TCP ingestion and the HTTP dashboard run in the same process. They use separate
+ports so existing ESP32 devices can keep connecting to `TCP_PORT`.
+
+## REST API
+
+- `GET /api/packets?page=1&pageSize=25` — packet list; optional filters are
+  `deviceId`, `meterSerial`, `search`, `from`, and `to`.
+- `GET /api/packets/:id` — complete raw payload for the JSON viewer.
+- `GET /api/packets/stats` — summary and chart series; optional filters are
+  `deviceId`, `from`, `to`, `interval=hour|day`, and `aggregate=avg|sum`.
+- `GET /api/devices` — known devices and last-seen information.
+- `GET /api/health` — lightweight HTTP health check.
+
+All user-supplied values are passed to MySQL as prepared-statement parameters.
+The existing indexes on receipt time, device identity, meter serial, and cycle
+time support the dashboard filters.
 
 ## Logs
 

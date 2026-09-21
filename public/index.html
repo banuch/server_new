@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="AMR DLMS packet monitoring dashboard">
+    <title>AMR Grid Monitor</title>
+    <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+    <header class="topbar">
+        <div class="brand">
+            <span class="brand-mark" aria-hidden="true">AMR</span>
+            <div>
+                <h1>Grid Monitor</h1>
+                <p>DLMS packet observability</p>
+            </div>
+        </div>
+        <div class="live-state"><span class="pulse"></span> Live database</div>
+    </header>
+
+    <main>
+        <section class="summary-grid" aria-label="System summary">
+            <article class="summary-card">
+                <span>Packets today</span>
+                <strong id="packetsToday">—</strong>
+                <small>Received since 00:00 UTC</small>
+            </article>
+            <article class="summary-card">
+                <span>Active devices</span>
+                <strong id="activeDevices">—</strong>
+                <small>Seen during the last hour</small>
+            </article>
+            <article class="summary-card wide-card">
+                <span>Last packet</span>
+                <strong id="lastPacket">—</strong>
+                <small id="lastPacketRelative">Waiting for data</small>
+            </article>
+        </section>
+
+        <section class="panel chart-panel">
+            <div class="panel-heading">
+                <div>
+                    <span class="eyebrow">Telemetry</span>
+                    <h2>Measurement trend</h2>
+                </div>
+                <div class="chart-controls">
+                    <label>Device
+                        <select id="chartDevice"><option value="">All devices</option></select>
+                    </label>
+                    <label>From <input id="chartFrom" type="datetime-local"></label>
+                    <label>To <input id="chartTo" type="datetime-local"></label>
+                    <label>Bucket
+                        <select id="chartInterval">
+                            <option value="hour">Hourly</option>
+                            <option value="day">Daily</option>
+                        </select>
+                    </label>
+                    <label>Function
+                        <select id="chartAggregate">
+                            <option value="avg">Average</option>
+                            <option value="sum">Sum</option>
+                        </select>
+                    </label>
+                    <label>Metric
+                        <select id="chartMetric">
+                            <option value="voltage_v">Voltage L1 (V)</option>
+                            <option value="current_a">Current L1 (A)</option>
+                            <option value="active_power_w">Active power (W)</option>
+                            <option value="energy_kwh">Energy (kWh)</option>
+                        </select>
+                    </label>
+                    <button id="applyChart" class="button primary" type="button">Apply</button>
+                </div>
+            </div>
+            <div class="chart-wrap">
+                <canvas id="telemetryChart" aria-label="AMR measurement trend"></canvas>
+                <div id="chartEmpty" class="empty-state hidden">No measurements match this range.</div>
+            </div>
+        </section>
+
+        <section class="panel data-panel">
+            <div class="panel-heading table-heading">
+                <div>
+                    <span class="eyebrow">Packet ledger</span>
+                    <h2>Incoming data</h2>
+                </div>
+                <label class="toggle">
+                    <input id="autoRefresh" type="checkbox" checked>
+                    <span></span> Refresh every 30s
+                </label>
+            </div>
+
+            <form id="filterForm" class="filters">
+                <label class="search-field">Search
+                    <input id="search" type="search" placeholder="Packet ID, device, serial, IP…">
+                </label>
+                <label>Device
+                    <select id="deviceFilter"><option value="">All devices</option></select>
+                </label>
+                <label>Meter serial
+                    <input id="meterFilter" type="text" placeholder="Any serial">
+                </label>
+                <label>From
+                    <input id="dateFrom" type="datetime-local">
+                </label>
+                <label>To
+                    <input id="dateTo" type="datetime-local">
+                </label>
+                <button class="button primary" type="submit">Filter</button>
+                <button id="clearFilters" class="button ghost" type="button">Clear</button>
+            </form>
+
+            <div id="notice" class="notice hidden" role="alert"></div>
+            <div class="table-scroll">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Packet</th><th>Status</th><th>Device</th><th>Meter</th>
+                            <th>Received</th><th>V L1</th><th>I L1</th><th>Energy</th><th>Size</th><th></th>
+                        </tr>
+                    </thead>
+                    <tbody id="packetRows"></tbody>
+                </table>
+                <div id="tableEmpty" class="empty-state hidden">No packets match these filters.</div>
+            </div>
+            <footer class="pagination">
+                <span id="pageSummary">Loading packets…</span>
+                <div>
+                    <button id="previousPage" class="button ghost" type="button">Previous</button>
+                    <button id="nextPage" class="button ghost" type="button">Next</button>
+                </div>
+            </footer>
+        </section>
+    </main>
+
+    <dialog id="packetDialog">
+        <div class="dialog-heading">
+            <div><span class="eyebrow">Raw payload</span><h2 id="dialogTitle">Packet</h2></div>
+            <button id="closeDialog" class="icon-button" type="button" aria-label="Close">×</button>
+        </div>
+        <div id="packetMeta" class="packet-meta"></div>
+        <pre id="rawPayload"></pre>
+    </dialog>
+
+    <script src="/vendor/chart.js"></script>
+    <script src="/app.js"></script>
+</body>
+</html>

@@ -6,13 +6,16 @@
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",
-    "test": "node --test test/config.test.js test/dlms-packet.test.js test/line-framer.test.js test/packet-repository.test.js test/server.test.js"
+    "test": "node --test test/*.test.js"
   },
   "engines": {
     "node": ">=18.0.0"
   },
   "license": "UNLICENSED",
   "dependencies": {
+    "chart.js": "^4.5.1",
+    "dotenv": "^18.0.1",
+    "express": "^5.2.1",
     "mysql2": "^3.24.4"
   }
 }

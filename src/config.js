@@ -2,39 +2,14 @@
 
 const fs = require('fs');
 const path = require('path');
+const dotenv = require('dotenv');
 
 const ENV_FILE = path.join(__dirname, '..', '.env');
 
 function loadEnvFile(file = ENV_FILE) {
-    let content;
-    try {
-        content = fs.readFileSync(file, 'utf8');
-    } catch (error) {
-        if (error.code === 'ENOENT') return;
-        throw error;
-    }
-
-    for (const rawLine of content.split(/\r?\n/)) {
-        const line = rawLine.trim();
-        if (!line || line.startsWith('#')) continue;
-
-        const match = line.match(/^(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/);
-        if (!match) continue;
-
-        const [, key, rawValue] = match;
-        let value = rawValue.trim();
-
-        if (
-            value.length >= 2
-            && ((value.startsWith('"') && value.endsWith('"'))
-                || (value.startsWith("'") && value.endsWith("'")))
-        ) {
-            value = value.slice(1, -1);
-        }
-
-        // Values provided by the host environment take precedence over .env.
-        if (process.env[key] === undefined) process.env[key] = value;
-    }
+    if (!fs.existsSync(file)) return;
+    const result = dotenv.config({ path: file, override: false, quiet: true });
+    if (result.error) throw result.error;
 }
 
 function positiveInteger(name, fallback) {
@@ -54,10 +29,14 @@ function loadConfig() {
 
     const port = positiveInteger('TCP_PORT', 5000);
     if (port > 65_535) throw new Error('TCP_PORT must be between 1 and 65535');
+    const webPort = positiveInteger('WEB_PORT', 3000);
+    if (webPort > 65_535) throw new Error('WEB_PORT must be between 1 and 65535');
 
     return {
         host: process.env.TCP_HOST || '0.0.0.0',
         port,
+        webHost: process.env.WEB_HOST || '0.0.0.0',
+        webPort,
         logDir: path.resolve(process.env.LOG_DIR || path.join(__dirname, '..', 'logs')),
         maxPacketBytes: positiveInteger('MAX_PACKET_BYTES', 256 * 1024),
         idleTimeoutMs: positiveInteger('IDLE_TIMEOUT_MS', 120_000),
