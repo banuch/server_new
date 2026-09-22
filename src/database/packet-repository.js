@@ -16,6 +16,29 @@ function transportDeviceId(record) {
     return `tcp:${address}`;
 }
 
+function receiptDeviceId(record, parsed) {
+    const parsedId = parsed?.payload?.device?.device_id;
+    if (parsedId !== undefined && parsedId !== null && parsedId !== '') return String(parsedId).slice(0, 64);
+
+    try {
+        const outer = JSON.parse(record.raw);
+        const payload = outer?.schema_version ? outer : outer?.readings;
+        const jsonId = payload?.device?.device_id
+            ?? payload?.deviceId
+            ?? payload?.device_id
+            ?? outer?.deviceId
+            ?? outer?.device_id;
+        if (jsonId !== undefined && jsonId !== null && jsonId !== '') return String(jsonId).slice(0, 64);
+    } catch {
+        // A truncated JSON packet may still contain its identity before the
+        // syntax error. Capture only a JSON string value as a best effort.
+        const match = String(record.raw).match(/"(?:device_id|deviceId)"\s*:\s*"([^"\\]{1,64})"/);
+        if (match) return match[1];
+    }
+
+    return transportDeviceId(record);
+}
+
 class PacketRepository {
     constructor(database) {
         this.database = database;
@@ -33,11 +56,12 @@ class PacketRepository {
         const connection = await this.database.getConnection();
         try {
             await connection.beginTransaction();
-            const receiptId = await this.#insertReceipt(connection, record, parseError);
+            const sourceDeviceId = receiptDeviceId(record, parsed);
+            const receiptId = await this.#insertReceipt(connection, record, parseError, sourceDeviceId);
 
             if (parseError) {
                 await connection.commit();
-                return { status: 'invalid', receiptId, error: parseError.message };
+                return { status: 'invalid', receiptId, deviceId: sourceDeviceId, error: parseError.message };
             }
 
             const payload = parsed.payload;
@@ -72,17 +96,17 @@ class PacketRepository {
         }
     }
 
-    async #insertReceipt(connection, record, parseError) {
+    async #insertReceipt(connection, record, parseError, sourceDeviceId) {
         const hash = crypto.createHash('sha256').update(record.raw, 'utf8').digest('hex');
         const [result] = await connection.execute(
             `INSERT INTO packet_receipts
                 (received_at, client_ip, client_port, byte_count, payload_sha256,
-                 raw_payload, parse_status, parse_error)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+                 raw_payload, parse_status, parse_error, source_device_uid)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
                 mysqlDate(record.receivedAt), nullable(record.clientIp), nullable(record.clientPort),
                 record.bytes, hash, record.raw, parseError ? 'invalid' : 'valid',
-                parseError ? parseError.message : null,
+                parseError ? parseError.message : null, nullable(sourceDeviceId),
             ],
         );
         return result.insertId;

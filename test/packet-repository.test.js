@@ -35,6 +35,36 @@ test('stores malformed JSON as an invalid packet receipt', async () => {
     assert.equal(calls.includes('rollback'), false);
     assert.equal(calls[1].values[6], 'invalid');
     assert.match(calls[1].values[7], /Unexpected token/);
+    assert.equal(calls[1].values[8], 'tcp:127.0.0.1');
+});
+
+test('retains a device id from a JSON packet that fails validation', async () => {
+    const calls = [];
+    const connection = {
+        async beginTransaction() {},
+        async execute(sql, values) {
+            calls.push({ sql, values });
+            return [{ insertId: 45 }];
+        },
+        async commit() {},
+        async rollback() {},
+        release() {},
+    };
+    const repository = new PacketRepository({ async getConnection() { return connection; } });
+    const raw = JSON.stringify({
+        schema_version: '2.1.0',
+        device: { device_id: 'MRI-BROKEN-007' },
+        cycle: {},
+    });
+
+    const result = await repository.savePacket({
+        receivedAt: '2026-09-21T12:00:00.000Z',
+        clientIp: '127.0.0.1', clientPort: 1234, bytes: Buffer.byteLength(raw), raw,
+    });
+
+    assert.equal(result.status, 'invalid');
+    assert.equal(result.deviceId, 'MRI-BROKEN-007');
+    assert.equal(calls[0].values[8], 'MRI-BROKEN-007');
 });
 
 test('rolls back and releases the connection when receipt storage fails', async () => {

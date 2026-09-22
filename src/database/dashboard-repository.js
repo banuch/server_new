@@ -21,7 +21,7 @@ function dateValue(value, name) {
 function addFilters(query, values, filters, alias = 'pr') {
     const clauses = [];
     if (filters.deviceId) {
-        clauses.push('d.device_uid = ?');
+        clauses.push('COALESCE(d.device_uid, pr.source_device_uid) = ?');
         values.push(filters.deviceId);
     }
     if (filters.meterSerial) {
@@ -39,7 +39,7 @@ function addFilters(query, values, filters, alias = 'pr') {
     if (filters.search) {
         const term = `%${filters.search}%`;
         clauses.push(`(
-            CAST(${alias}.id AS CHAR) LIKE ? OR d.device_uid LIKE ? OR d.meter_serial LIKE ?
+            CAST(${alias}.id AS CHAR) LIKE ? OR COALESCE(d.device_uid, pr.source_device_uid) LIKE ? OR d.meter_serial LIKE ?
             OR ${alias}.client_ip LIKE ? OR ${alias}.parse_status LIKE ? OR ${alias}.parse_error LIKE ?
         )`);
         values.push(term, term, term, term, term, term);
@@ -82,7 +82,8 @@ class DashboardRepository {
         const values = [];
         let sql = addFilters(
             `SELECT pr.id, pr.received_at, pr.client_ip, pr.client_port, pr.byte_count,
-                    pr.parse_status, pr.parse_error, d.device_uid, d.meter_serial,
+                    pr.parse_status, pr.parse_error,
+                    COALESCE(d.device_uid, pr.source_device_uid) AS device_uid, d.meter_serial,
                     mc.device_cycle_number, mc.meter_ts_utc, mc.mode,
                     ir.voltage_l1_v, ir.current_l1_a, ir.active_import_w,
                     er.active_import_wh
@@ -115,7 +116,8 @@ class DashboardRepository {
         const [rows] = await this.database.execute(
             `SELECT pr.id, pr.received_at, pr.client_ip, pr.client_port, pr.byte_count,
                     pr.parse_status, pr.parse_error, pr.raw_payload,
-                    d.device_uid, d.meter_serial, mc.device_cycle_number, mc.meter_ts_utc
+                    COALESCE(d.device_uid, pr.source_device_uid) AS device_uid,
+                    d.meter_serial, mc.device_cycle_number, mc.meter_ts_utc
              FROM packet_receipts pr
              LEFT JOIN packet_cycle_links pcl ON pcl.receipt_id = pr.id
              LEFT JOIN measurement_cycles mc ON mc.id = pcl.cycle_id

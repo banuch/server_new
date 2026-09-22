@@ -229,6 +229,14 @@ const MIGRATIONS = [
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
         ],
     },
+    {
+        version: 3,
+        statements: [
+            `ALTER TABLE packet_receipts
+             ADD COLUMN source_device_uid VARCHAR(64) NULL AFTER parse_error,
+             ADD KEY idx_receipts_source_device (source_device_uid)`,
+        ],
+    },
 ];
 
 module.exports = { MIGRATIONS };

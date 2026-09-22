@@ -24,6 +24,8 @@ test('packet filters are passed as query parameters and pagination is bounded', 
     assert.equal(calls.length, 2);
     assert.equal(calls[0].sql.includes('MRI-001'), false);
     assert.equal(calls[0].values.includes('MRI-001'), true);
+    assert.match(calls[0].sql, /COALESCE\(d\.device_uid, pr\.source_device_uid\)/);
+    assert.match(calls[1].sql, /COALESCE\(d\.device_uid, pr\.source_device_uid\) AS device_uid/);
     assert.deepEqual(calls[1].values.slice(-2), [10, 10]);
 });
 
