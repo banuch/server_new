@@ -55,3 +55,84 @@ test('rejects invalid date ranges before querying', async () => {
         /from must be earlier/,
     );
 });
+
+test('returns the latest detailed device overview', async () => {
+    const calls = [];
+    const database = {
+        async execute(sql, values) {
+            calls.push({ sql, values });
+            return sql.includes('FROM cycle_configs')
+                ? [[{ ct_ratio: '1.000000' }]]
+                : [[{ device_uid: 'MRI-001', voltage_l1_v: '231.2' }]];
+        },
+    };
+    const repository = new DashboardRepository(database);
+
+    const overview = await repository.getDeviceOverview('MRI-001');
+
+    assert.equal(overview.device_uid, 'MRI-001');
+    assert.equal(overview.ct_ratio, '1.000000');
+    assert.equal(calls[0].values[0], 'MRI-001');
+    assert.match(calls[0].sql, /ORDER BY pr\.received_at DESC/);
+    assert.match(calls[0].sql, /LEFT JOIN device_health/);
+    assert.match(calls[1].sql, /FROM cycle_configs/);
+});
+
+test('paginates and date-filters block load readings', async () => {
+    const calls = [];
+    const database = {
+        async execute(sql, values) {
+            calls.push({ sql, values });
+            return sql.includes('COUNT(*)') ? [[{ total: 11 }]] : [[{ active_energy_wh: '12' }]];
+        },
+    };
+    const repository = new DashboardRepository(database);
+    const result = await repository.getBlockLoad('MRI-001', {
+        page: '2', pageSize: '5', from: '2026-09-01', to: '2026-09-30',
+    });
+
+    assert.equal(result.pagination.totalPages, 3);
+    assert.deepEqual(calls[1].values.slice(-2), [5, 5]);
+    assert.match(calls[1].sql, /block_load_entries/);
+    assert.match(calls[1].sql, /reading_ts_utc >= \?/);
+});
+
+test('filters events by log and numeric event code', async () => {
+    const calls = [];
+    const database = {
+        async execute(sql, values) {
+            calls.push({ sql, values });
+            return sql.includes('COUNT(*)') ? [[{ total: 1 }]] : [[{ event_code: 203 }]];
+        },
+    };
+    const repository = new DashboardRepository(database);
+    const result = await repository.getEvents('MRI-001', { eventLog: 'event_log_4', eventCode: '203' });
+
+    assert.equal(result.rows[0].event_code, 203);
+    assert.deepEqual(calls[0].values, ['MRI-001', 'event_log_4', 203]);
+    assert.match(calls[1].sql, /LEFT JOIN event_measurements/);
+});
+
+test('returns current billing and paginated billing history', async () => {
+    const calls = [];
+    const database = {
+        async execute(sql, values) {
+            calls.push({ sql, values });
+            if (sql.includes('FROM billing_current')) return [[{ active_import_wh: '1000' }]];
+            if (sql.includes('COUNT(*)')) return [[{ total: 2 }]];
+            return [[{ billing_cycle_number: 7 }]];
+        },
+    };
+    const repository = new DashboardRepository(database);
+    const result = await repository.getBilling('MRI-001', { page: '1', pageSize: '10' });
+
+    assert.equal(result.current.active_import_wh, '1000');
+    assert.equal(result.history[0].billing_cycle_number, 7);
+    assert.equal(result.pagination.total, 2);
+    assert.deepEqual(calls[2].values.slice(-2), [10, 0]);
+});
+
+test('rejects profile requests without a device identity', async () => {
+    const repository = new DashboardRepository({ execute: async () => [[]] });
+    await assert.rejects(repository.getDailyLoad('', {}), /deviceId is required/);
+});

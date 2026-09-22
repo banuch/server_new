@@ -237,6 +237,13 @@ const MIGRATIONS = [
              ADD KEY idx_receipts_source_device (source_device_uid)`,
         ],
     },
+    {
+        version: 4,
+        statements: [
+            'ALTER TABLE billing_history ADD KEY idx_billing_device_date (device_id, billing_date_utc)',
+            'ALTER TABLE meter_events ADD KEY idx_events_device_time (device_id, event_ts_utc)',
+        ],
+    },
 ];
 
 module.exports = { MIGRATIONS };

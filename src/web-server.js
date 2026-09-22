@@ -25,6 +25,10 @@ function createWebServer(repository, output = console) {
         response.json(await repository.getStats(request.query));
     }));
 
+    app.get('/api/summary', asyncRoute(async (request, response) => {
+        response.json(await repository.getSummary());
+    }));
+
     app.get('/api/packets/:id', asyncRoute(async (request, response) => {
         const packet = await repository.getPacket(request.params.id);
         if (!packet) return response.status(404).json({ error: 'Packet not found' });
@@ -33,6 +37,28 @@ function createWebServer(repository, output = console) {
 
     app.get('/api/devices', asyncRoute(async (request, response) => {
         response.json({ devices: await repository.getDevices() });
+    }));
+
+    app.get('/api/devices/:deviceId/overview', asyncRoute(async (request, response) => {
+        const overview = await repository.getDeviceOverview(request.params.deviceId);
+        if (!overview) return response.status(404).json({ error: 'Device not found' });
+        return response.json(overview);
+    }));
+
+    app.get('/api/devices/:deviceId/block-load', asyncRoute(async (request, response) => {
+        response.json(await repository.getBlockLoad(request.params.deviceId, request.query));
+    }));
+
+    app.get('/api/devices/:deviceId/daily-load', asyncRoute(async (request, response) => {
+        response.json(await repository.getDailyLoad(request.params.deviceId, request.query));
+    }));
+
+    app.get('/api/devices/:deviceId/billing', asyncRoute(async (request, response) => {
+        response.json(await repository.getBilling(request.params.deviceId, request.query));
+    }));
+
+    app.get('/api/devices/:deviceId/events', asyncRoute(async (request, response) => {
+        response.json(await repository.getEvents(request.params.deviceId, request.query));
     }));
 
     app.get('/api/health', (request, response) => response.json({ status: 'ok' }));

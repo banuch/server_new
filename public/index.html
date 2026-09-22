@@ -3,147 +3,87 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="description" content="AMR DLMS packet monitoring dashboard">
-    <title>AMR Grid Monitor</title>
+    <meta name="description" content="AMR meter operations dashboard">
+    <title>AMR Meter Operations</title>
     <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
     <header class="topbar">
-        <div class="brand">
-            <span class="brand-mark" aria-hidden="true">AMR</span>
-            <div>
-                <h1>Grid Monitor</h1>
-                <p>DLMS packet observability</p>
-            </div>
+        <div class="brand"><span class="brand-mark" aria-hidden="true">AMR</span><div><h1>Meter Operations</h1><p>DLMS monitoring console</p></div></div>
+        <div class="header-actions">
+            <label class="device-picker">Active meter<select id="activeDevice"><option value="">Select a device</option></select></label>
+            <button id="refreshView" class="button ghost" type="button">Refresh</button>
+            <div class="live-state"><span class="pulse"></span> Live</div>
         </div>
-        <div class="live-state"><span class="pulse"></span> Live database</div>
     </header>
 
     <main>
         <section class="summary-grid" aria-label="System summary">
-            <article class="summary-card">
-                <span>Packets today</span>
-                <strong id="packetsToday">—</strong>
-                <small>Received since 00:00 UTC</small>
-            </article>
-            <article class="summary-card">
-                <span>Active devices</span>
-                <strong id="activeDevices">—</strong>
-                <small>Seen during the last hour</small>
-            </article>
-            <article class="summary-card wide-card">
-                <span>Last packet</span>
-                <strong id="lastPacket">—</strong>
-                <small id="lastPacketRelative">Waiting for data</small>
-            </article>
+            <article class="summary-card"><span>Packets today</span><strong id="packetsToday">—</strong><small>Since 00:00 UTC</small></article>
+            <article class="summary-card"><span>Active devices</span><strong id="activeDevices">—</strong><small>Seen in the last hour</small></article>
+            <article class="summary-card"><span>Selected meter</span><strong id="selectedMeter">—</strong><small id="selectedMeterMeta">Choose a device</small></article>
+            <article class="summary-card"><span>Last communication</span><strong id="lastCommunication">—</strong><small id="lastCommunicationRelative">Waiting for data</small></article>
         </section>
 
-        <section class="panel chart-panel">
-            <div class="panel-heading">
-                <div>
-                    <span class="eyebrow">Telemetry</span>
-                    <h2>Measurement trend</h2>
-                </div>
-                <div class="chart-controls">
-                    <label>Device
-                        <select id="chartDevice"><option value="">All devices</option></select>
-                    </label>
-                    <label>From <input id="chartFrom" type="datetime-local"></label>
-                    <label>To <input id="chartTo" type="datetime-local"></label>
-                    <label>Bucket
-                        <select id="chartInterval">
-                            <option value="hour">Hourly</option>
-                            <option value="day">Daily</option>
-                        </select>
-                    </label>
-                    <label>Function
-                        <select id="chartAggregate">
-                            <option value="avg">Average</option>
-                            <option value="sum">Sum</option>
-                        </select>
-                    </label>
-                    <label>Metric
-                        <select id="chartMetric">
-                            <option value="voltage_v">Voltage L1 (V)</option>
-                            <option value="current_a">Current L1 (A)</option>
-                            <option value="active_power_w">Active power (W)</option>
-                            <option value="energy_kwh">Energy (kWh)</option>
-                        </select>
-                    </label>
-                    <button id="applyChart" class="button primary" type="button">Apply</button>
-                </div>
+        <nav class="section-tabs" aria-label="Dashboard sections">
+            <button class="section-tab active" data-view="overview" type="button">Overview</button>
+            <button class="section-tab" data-view="profiles" type="button">Load profiles</button>
+            <button class="section-tab" data-view="billing" type="button">Billing</button>
+            <button class="section-tab" data-view="events" type="button">Events</button>
+            <button class="section-tab" data-view="packets" type="button">Packets</button>
+        </nav>
+
+        <div id="notice" class="notice hidden" role="alert"></div>
+        <div id="devicePrompt" class="panel prompt-panel">Select an active meter to view its operational data.</div>
+
+        <section id="view-overview" class="dashboard-view">
+            <div class="overview-grid">
+                <article class="panel"><div class="panel-heading"><div><span class="eyebrow">Identity</span><h2>Name plate</h2></div><span id="meterStatus" class="status invalid">Unknown</span></div><dl id="nameplateGrid" class="detail-grid"></dl></article>
+                <article class="panel"><div class="panel-heading"><div><span class="eyebrow">Communication</span><h2>Device health</h2></div></div><dl id="healthGrid" class="detail-grid"></dl></article>
             </div>
-            <div class="chart-wrap">
-                <canvas id="telemetryChart" aria-label="AMR measurement trend"></canvas>
-                <div id="chartEmpty" class="empty-state hidden">No measurements match this range.</div>
+            <section class="panel"><div class="panel-heading"><div><span class="eyebrow">Latest reading</span><h2>Instant values</h2></div><span id="readingTime" class="heading-note">—</span></div><div id="instantGrid" class="metric-grid"></div></section>
+            <div class="overview-grid">
+                <section class="panel"><div class="panel-heading"><div><span class="eyebrow">Registers</span><h2>Energy</h2></div></div><div id="energyGrid" class="metric-grid compact"></div></section>
+                <section class="panel"><div class="panel-heading"><div><span class="eyebrow">Meter state</span><h2>Counters</h2></div></div><dl id="counterGrid" class="detail-grid"></dl></section>
             </div>
         </section>
 
-        <section class="panel data-panel">
-            <div class="panel-heading table-heading">
-                <div>
-                    <span class="eyebrow">Packet ledger</span>
-                    <h2>Incoming data</h2>
-                </div>
-                <label class="toggle">
-                    <input id="autoRefresh" type="checkbox" checked>
-                    <span></span> Refresh every 30s
-                </label>
-            </div>
-
-            <form id="filterForm" class="filters">
-                <label class="search-field">Search
-                    <input id="search" type="search" placeholder="Packet ID, device, serial, IP…">
-                </label>
-                <label>Device
-                    <select id="deviceFilter"><option value="">All devices</option></select>
-                </label>
-                <label>Meter serial
-                    <input id="meterFilter" type="text" placeholder="Any serial">
-                </label>
-                <label>From
-                    <input id="dateFrom" type="datetime-local">
-                </label>
-                <label>To
-                    <input id="dateTo" type="datetime-local">
-                </label>
-                <button class="button primary" type="submit">Filter</button>
-                <button id="clearFilters" class="button ghost" type="button">Clear</button>
-            </form>
-
-            <div id="notice" class="notice hidden" role="alert"></div>
-            <div class="table-scroll">
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Packet</th><th>Status</th><th>Device</th><th>Meter</th>
-                            <th>Received</th><th>V L1</th><th>I L1</th><th>Energy</th><th>Size</th><th></th>
-                        </tr>
-                    </thead>
-                    <tbody id="packetRows"></tbody>
-                </table>
-                <div id="tableEmpty" class="empty-state hidden">No packets match these filters.</div>
-            </div>
-            <footer class="pagination">
-                <span id="pageSummary">Loading packets…</span>
-                <div>
-                    <button id="previousPage" class="button ghost" type="button">Previous</button>
-                    <button id="nextPage" class="button ghost" type="button">Next</button>
-                </div>
-            </footer>
+        <section id="view-profiles" class="dashboard-view hidden">
+            <section class="panel">
+                <div class="panel-heading responsive-heading"><div><span class="eyebrow">Historical intervals</span><h2>Load profiles</h2></div><div class="segmented"><button class="active" data-profile="block" type="button">Block load</button><button data-profile="daily" type="button">Daily survey</button></div></div>
+                <form id="profileFilters" class="filters"><label>From <input id="profileFrom" type="datetime-local"></label><label>To <input id="profileTo" type="datetime-local"></label><label>Metric <select id="profileMetric"></select></label><button class="button primary" type="submit">Apply</button></form>
+                <div class="chart-wrap"><canvas id="profileChart"></canvas><div id="profileChartEmpty" class="empty-state hidden">No profile readings found.</div></div>
+                <div class="table-scroll"><table><thead id="profileHead"></thead><tbody id="profileRows"></tbody></table></div>
+                <footer class="pagination"><span id="profilePageSummary">—</span><div><button id="profilePrevious" class="button ghost" type="button">Previous</button><button id="profileNext" class="button ghost" type="button">Next</button></div></footer>
+            </section>
         </section>
+
+        <section id="view-billing" class="dashboard-view hidden">
+            <section class="panel"><div class="panel-heading"><div><span class="eyebrow">Latest snapshot</span><h2>Current billing</h2></div><span id="billingTime" class="heading-note">—</span></div><div id="billingSummary" class="metric-grid"></div></section>
+            <section class="panel">
+                <div class="panel-heading"><div><span class="eyebrow">Previous cycles</span><h2>Billing history</h2></div></div>
+                <form id="billingFilters" class="filters"><label>From <input id="billingFrom" type="date"></label><label>To <input id="billingTo" type="date"></label><button class="button primary" type="submit">Apply</button></form>
+                <div class="table-scroll"><table><thead><tr><th>Cycle</th><th>Billing date</th><th>Active</th><th>Apparent</th><th>Reactive QI</th><th>Reactive QIII</th><th>System PF</th><th>Duration</th><th>Max demand</th><th>Max apparent</th></tr></thead><tbody id="billingRows"></tbody></table><div id="billingEmpty" class="empty-state hidden">No billing history found.</div></div>
+                <footer class="pagination"><span id="billingPageSummary">—</span><div><button id="billingPrevious" class="button ghost" type="button">Previous</button><button id="billingNext" class="button ghost" type="button">Next</button></div></footer>
+            </section>
+        </section>
+
+        <section id="view-events" class="dashboard-view hidden"><section class="panel">
+            <div class="panel-heading"><div><span class="eyebrow">Meter exceptions</span><h2>Event timeline</h2></div></div>
+            <form id="eventFilters" class="filters"><label>Event log <input id="eventLog" type="text" placeholder="e.g. event_log_4"></label><label>Event code <input id="eventCode" type="number" placeholder="Any code"></label><label>From <input id="eventFrom" type="datetime-local"></label><label>To <input id="eventTo" type="datetime-local"></label><button class="button primary" type="submit">Apply</button><button id="clearEventFilters" class="button ghost" type="button">Clear</button></form>
+            <div class="table-scroll"><table><thead><tr><th>Time</th><th>Log</th><th>Code</th><th>Voltage L1/L2/L3</th><th>Current L1/L2/L3</th><th>PF L1/L2/L3</th><th>Active energy</th><th>Apparent energy</th><th></th></tr></thead><tbody id="eventRows"></tbody></table><div id="eventEmpty" class="empty-state hidden">No events match these filters.</div></div>
+            <footer class="pagination"><span id="eventPageSummary">—</span><div><button id="eventPrevious" class="button ghost" type="button">Previous</button><button id="eventNext" class="button ghost" type="button">Next</button></div></footer>
+        </section></section>
+
+        <section id="view-packets" class="dashboard-view hidden"><section class="panel data-panel">
+            <div class="panel-heading table-heading"><div><span class="eyebrow">Diagnostics</span><h2>Packet ledger</h2></div><label class="toggle"><input id="autoRefresh" type="checkbox" checked><span></span> Refresh every 30s</label></div>
+            <form id="filterForm" class="filters"><label class="search-field">Search <input id="search" type="search" placeholder="Packet, device, serial, IP…"></label><label>Meter serial <input id="meterFilter" type="text" placeholder="Any serial"></label><label>From <input id="dateFrom" type="datetime-local"></label><label>To <input id="dateTo" type="datetime-local"></label><button class="button primary" type="submit">Filter</button><button id="clearFilters" class="button ghost" type="button">Clear</button></form>
+            <div class="table-scroll"><table><thead><tr><th>Packet</th><th>Status</th><th>Device</th><th>Meter</th><th>Received</th><th>V L1</th><th>I L1</th><th>Energy</th><th>Size</th><th></th></tr></thead><tbody id="packetRows"></tbody></table><div id="tableEmpty" class="empty-state hidden">No packets match these filters.</div></div>
+            <footer class="pagination"><span id="pageSummary">Loading packets…</span><div><button id="previousPage" class="button ghost" type="button">Previous</button><button id="nextPage" class="button ghost" type="button">Next</button></div></footer>
+        </section></section>
     </main>
 
-    <dialog id="packetDialog">
-        <div class="dialog-heading">
-            <div><span class="eyebrow">Raw payload</span><h2 id="dialogTitle">Packet</h2></div>
-            <button id="closeDialog" class="icon-button" type="button" aria-label="Close">×</button>
-        </div>
-        <div id="packetMeta" class="packet-meta"></div>
-        <pre id="rawPayload"></pre>
-    </dialog>
-
-    <script src="/vendor/chart.js"></script>
-    <script src="/app.js"></script>
+    <dialog id="packetDialog"><div class="dialog-heading"><div><span class="eyebrow">Raw payload</span><h2 id="dialogTitle">Packet</h2></div><button id="closeDialog" class="icon-button" type="button" aria-label="Close">×</button></div><div id="packetMeta" class="packet-meta"></div><pre id="rawPayload"></pre></dialog>
+    <script src="/vendor/chart.js"></script><script src="/app.js"></script>
 </body>
 </html>

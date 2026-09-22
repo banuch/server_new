@@ -99,7 +99,14 @@ ports so existing ESP32 devices can keep connecting to `TCP_PORT`.
 - `GET /api/packets/:id` — complete raw payload for the JSON viewer.
 - `GET /api/packets/stats` — summary and chart series; optional filters are
   `deviceId`, `from`, `to`, `interval=hour|day`, and `aggregate=avg|sum`.
+- `GET /api/summary` — lightweight packet and active-device totals.
 - `GET /api/devices` — known devices and last-seen information.
+- `GET /api/devices/:deviceId/overview` — nameplate, latest instant values,
+  energy registers, counters, and communication health.
+- `GET /api/devices/:deviceId/block-load` — paginated interval load profile.
+- `GET /api/devices/:deviceId/daily-load` — paginated daily load survey.
+- `GET /api/devices/:deviceId/billing` — current billing snapshot and history.
+- `GET /api/devices/:deviceId/events` — event timeline and captured measurements.
 - `GET /api/health` — lightweight HTTP health check.
 
 All user-supplied values are passed to MySQL as prepared-statement parameters.

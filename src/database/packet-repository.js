@@ -73,7 +73,9 @@ class PacketRepository {
                 [receiptId, cycleId],
             );
 
-            await this.#saveConfig(connection, cycleId, payload.config || {});
+            if (payload.config && typeof payload.config === 'object') {
+                await this.#saveConfig(connection, cycleId, payload.config);
+            }
             await this.#saveReadings(connection, cycleId, payload.readings || {});
             await this.#saveBilling(connection, deviceId, cycleId, payload.billing || {});
             await this.#saveProfiles(connection, deviceId, cycleId, payload.profiles || {});
@@ -118,9 +120,11 @@ class PacketRepository {
                 (device_uid, meter_serial, firmware, manufacturer, manufacture_year, utility)
              VALUES (?, ?, ?, ?, ?, ?)
              ON DUPLICATE KEY UPDATE
-                id = LAST_INSERT_ID(id), meter_serial = VALUES(meter_serial),
-                firmware = VALUES(firmware), manufacturer = VALUES(manufacturer),
-                manufacture_year = VALUES(manufacture_year), utility = VALUES(utility)`,
+                id = LAST_INSERT_ID(id), meter_serial = COALESCE(VALUES(meter_serial), meter_serial),
+                firmware = COALESCE(VALUES(firmware), firmware),
+                manufacturer = COALESCE(VALUES(manufacturer), manufacturer),
+                manufacture_year = COALESCE(VALUES(manufacture_year), manufacture_year),
+                utility = COALESCE(VALUES(utility), utility)`,
             [device.device_id, nullable(device.meter_serial), nullable(device.firmware),
                 nullable(device.manufacturer), nullable(device.mfr_year), nullable(device.utility)],
         );

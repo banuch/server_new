@@ -132,4 +132,6 @@ test('stores a direct device-less delta packet using its TCP client identity', a
     assert.equal(result.deviceId, 'tcp:192.0.2.10');
     const deviceInsert = calls.find((call) => call.sql.includes('INSERT INTO devices'));
     assert.equal(deviceInsert.values[0], 'tcp:192.0.2.10');
+    assert.match(deviceInsert.sql, /COALESCE\(VALUES\(meter_serial\), meter_serial\)/);
+    assert.equal(calls.some((call) => call.sql.includes('INSERT INTO cycle_configs')), false);
 });
