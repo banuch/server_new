@@ -9,6 +9,13 @@ function eventCode(entry) {
     return legacyKey ? entry[legacyKey] : -1;
 }
 
+function transportDeviceId(record) {
+    if (record.deviceId) return record.deviceId;
+    if (!record.clientIp) return null;
+    const address = String(record.clientIp).replace(/^::ffff:/, '');
+    return `tcp:${address}`;
+}
+
 class PacketRepository {
     constructor(database) {
         this.database = database;
@@ -18,7 +25,7 @@ class PacketRepository {
         let parsed;
         let parseError = null;
         try {
-            parsed = parseDlmsPacket(record.raw);
+            parsed = parseDlmsPacket(record.raw, { deviceId: transportDeviceId(record) });
         } catch (error) {
             parseError = error;
         }

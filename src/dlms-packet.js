@@ -14,21 +14,34 @@ function requiredValue(value, name) {
     return value;
 }
 
-function parseDlmsPacket(raw) {
+function parseDlmsPacket(raw, options = {}) {
     const outer = JSON.parse(raw);
     requiredObject(outer, 'packet');
 
     // Accept the direct schema packet and the optional METER_DATA envelope used
     // by some firmware revisions.
-    const payload = outer.schema_version
+    let payload = outer.schema_version
         ? outer
         : (outer.readings && outer.readings.schema_version ? outer.readings : null);
 
     if (!payload) throw new Error('unsupported packet: schema_version not found');
 
     requiredValue(payload.schema_version, 'schema_version');
-    const device = requiredObject(payload.device, 'device');
     const cycle = requiredObject(payload.cycle, 'cycle');
+    let device = payload.device;
+
+    // Delta packets can omit the unchanged device block. Prefer identity from
+    // a transport envelope, then fall back to the identity supplied by the
+    // receiver (for TCP this is a stable client-derived identity).
+    if ((!device || typeof device !== 'object' || Array.isArray(device)) && cycle.mode === 'delta') {
+        const deviceId = outer.deviceId || outer.device_id || options.deviceId;
+        if (deviceId !== undefined && deviceId !== null && deviceId !== '') {
+            device = { device_id: deviceId };
+            payload = { ...payload, device };
+        }
+    }
+
+    device = requiredObject(device, 'device');
     requiredValue(device.device_id, 'device.device_id');
     requiredValue(cycle.id, 'cycle.id');
     requiredValue(cycle.ts_utc, 'cycle.ts_utc');
