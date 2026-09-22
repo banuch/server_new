@@ -141,6 +141,16 @@ Run automated tests:
 npm test
 ```
 
+To clear all application data before a test run while preserving the tables and
+schema migration history, stop the server and run:
+
+```powershell
+npm run db:reset -- --confirm-reset
+```
+
+This permanently truncates the configured `DB_NAME` and resets its auto-increment
+counters. The confirmation flag is required to prevent accidental execution.
+
 With the server running, send a sample packet from another terminal:
 
 ```powershell
