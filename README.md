@@ -151,6 +151,28 @@ npm run db:reset -- --confirm-reset
 This permanently truncates the configured `DB_NAME` and resets its auto-increment
 counters. The confirmation flag is required to prevent accidental execution.
 
+## Server deployment
+
+On the Linux server, pull the latest commit and restart the systemd service with:
+
+```bash
+./scripts/pull-and-restart.sh
+```
+
+To keep following the service logs after a successful restart:
+
+```bash
+./scripts/pull-and-restart.sh --follow
+```
+
+The script uses `git pull --ff-only`, runs `npm ci --omit=dev`, reloads systemd,
+restarts `dashboard-server`, and prints its status. Set `SERVICE_NAME` when the
+systemd unit has a different name, for example:
+
+```bash
+SERVICE_NAME=my-dashboard ./scripts/pull-and-restart.sh
+```
+
 With the server running, send a sample packet from another terminal:
 
 ```powershell
