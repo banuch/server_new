@@ -102,14 +102,20 @@ test('filters events by log and numeric event code', async () => {
     const database = {
         async execute(sql, values) {
             calls.push({ sql, values });
-            return sql.includes('COUNT(*)') ? [[{ total: 1 }]] : [[{ event_code: 203 }]];
+            return sql.includes('COUNT(*)') ? [[{ total: 1 }]] : [[{
+                event_code: 203,
+                event_category: 'Other events',
+                event_description: 'Neutral disturbance - HF and DC - occurrence',
+            }]];
         },
     };
     const repository = new DashboardRepository(database);
     const result = await repository.getEvents('MRI-001', { eventLog: 'event_log_4', eventCode: '203' });
 
     assert.equal(result.rows[0].event_code, 203);
+    assert.equal(result.rows[0].event_description, 'Neutral disturbance - HF and DC - occurrence');
     assert.deepEqual(calls[0].values, ['MRI-001', 'event_log_4', 203]);
+    assert.match(calls[1].sql, /LEFT JOIN event_code_lookup/);
     assert.match(calls[1].sql, /LEFT JOIN event_measurements/);
 });
 

@@ -334,12 +334,14 @@ class DashboardRepository {
 
         const values = [deviceId];
         const sql = `SELECT me.event_log_key, me.event_ts_utc, me.event_code,
+                            ecl.event_category, ecl.description AS event_description,
                             em.current_l1_a, em.current_l2_a, em.current_l3_a,
                             em.voltage_l1_v, em.voltage_l2_v, em.voltage_l3_v,
                             em.power_factor_l1, em.power_factor_l2, em.power_factor_l3,
                             em.active_import_wh, em.apparent_import_vah
                      FROM meter_events me
                      JOIN devices d ON d.id = me.device_id
+                     LEFT JOIN event_code_lookup ecl ON ecl.event_code = me.event_code
                      LEFT JOIN event_measurements em ON em.event_id = me.id
                      WHERE d.device_uid = ?${filter(values)}
                      ORDER BY me.event_ts_utc DESC LIMIT ? OFFSET ?`;

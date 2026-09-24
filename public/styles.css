@@ -143,6 +143,10 @@ pre { margin: 0; padding: 22px; max-height: 60vh; overflow: auto; color: #bcd1c9
 .triple b { color: var(--muted); font-size: 9px; }
 .empty-cell { padding: 38px !important; text-align: center; color: var(--muted); }
 .event-detail td { padding: 0; background: rgba(7,13,18,.72); }
+.event-code { min-width: 260px; max-width: 360px; white-space: normal; display: grid; grid-template-columns: auto 1fr; gap: 3px 9px; align-items: baseline; }
+.event-code strong { color: var(--accent); font-size: 15px; }
+.event-code span { line-height: 1.35; }
+.event-code small { grid-column: 2; color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: .07em; }
 .snapshot-grid { display: grid; grid-template-columns: repeat(4, minmax(130px, 1fr)); gap: 1px; margin: 0; background: var(--line); white-space: normal; }
 .snapshot-grid > div { padding: 13px 15px; background: #0d141b; }
 .snapshot-grid dt { margin-bottom: 5px; color: var(--muted); font-size: 9px; text-transform: uppercase; letter-spacing: .08em; }
