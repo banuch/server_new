@@ -3,7 +3,7 @@
 const state = {
     view: 'overview', deviceId: '', profileType: 'block', profileChart: null,
     profilePage: 1, profilePages: 0, billingPage: 1, billingPages: 0,
-    eventPage: 1, eventPages: 0, packetPage: 1, packetPages: 0, refreshTimer: null,
+    eventPage: 1, eventPages: 0, eventCategory: '', packetPage: 1, packetPages: 0, refreshTimer: null,
 };
 const byId = (id) => document.getElementById(id);
 
@@ -245,7 +245,7 @@ async function loadBilling() {
 
 async function loadEvents() {
     if (!state.deviceId) return;
-    const data = await api(`/api/devices/${encodeURIComponent(state.deviceId)}/events?${queryString({ page: state.eventPage, pageSize: 25, eventLog: byId('eventLog').value.trim(), eventCode: byId('eventCode').value, from: inputIso('eventFrom'), to: inputIso('eventTo') })}`);
+    const data = await api(`/api/devices/${encodeURIComponent(state.deviceId)}/events?${queryString({ page: state.eventPage, pageSize: 25, eventCategory: state.eventCategory, eventLog: byId('eventLog').value.trim(), eventCode: byId('eventCode').value, from: inputIso('eventFrom'), to: inputIso('eventTo') })}`);
     byId('eventRows').innerHTML = data.rows.map((row, index) => `
         <tr><td>${escapeHtml(formatDate(row.event_ts_utc))}</td><td>${escapeHtml(row.event_log_key)}</td><td><div class="event-code"><strong>${escapeHtml(row.event_code)}</strong><span>${escapeHtml(row.event_description || 'Unrecognized event code')}</span>${row.event_category ? `<small>${escapeHtml(row.event_category)}</small>` : ''}</div></td><td>${triple(row.voltage_l1_v, row.voltage_l2_v, row.voltage_l3_v, 2, 'V')}</td><td>${triple(row.current_l1_a, row.current_l2_a, row.current_l3_a, 3, 'A')}</td><td>${triple(row.power_factor_l1, row.power_factor_l2, row.power_factor_l3, 3)}</td><td>${number(row.active_import_wh, 2)} Wh</td><td>${number(row.apparent_import_vah, 2)} VAh</td><td><button class="view-button" data-event-toggle="${index}" type="button">Details</button></td></tr>
         <tr id="event-detail-${index}" class="event-detail hidden"><td colspan="9"><dl class="snapshot-grid">${details([
@@ -328,6 +328,16 @@ function initializeEvents() {
     byId('profileMetric').addEventListener('change', loadProfiles);
     byId('profileFilters').addEventListener('submit', (event) => { event.preventDefault(); state.profilePage = 1; loadProfiles().catch(showError); });
     byId('billingFilters').addEventListener('submit', (event) => { event.preventDefault(); state.billingPage = 1; loadBilling().catch(showError); });
+    document.querySelectorAll('[data-event-category]').forEach((button) => button.addEventListener('click', () => {
+        state.eventCategory = button.dataset.eventCategory;
+        state.eventPage = 1;
+        document.querySelectorAll('[data-event-category]').forEach((item) => {
+            const active = item === button;
+            item.classList.toggle('active', active);
+            item.setAttribute('aria-selected', String(active));
+        });
+        loadEvents().catch(showError);
+    }));
     byId('eventFilters').addEventListener('submit', (event) => { event.preventDefault(); state.eventPage = 1; loadEvents().catch(showError); });
     byId('clearEventFilters').addEventListener('click', () => { byId('eventFilters').reset(); state.eventPage = 1; loadEvents().catch(showError); });
     byId('eventRows').addEventListener('click', (event) => { const button = event.target.closest('[data-event-toggle]'); if (button) byId(`event-detail-${button.dataset.eventToggle}`).classList.toggle('hidden'); });

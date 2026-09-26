@@ -314,6 +314,7 @@ class DashboardRepository {
         const range = rangeValues(input);
         const { page, pageSize } = pageValues(input);
         const eventLog = String(input.eventLog || '').trim();
+        const eventCategory = String(input.eventCategory || '').trim();
         const eventCode = input.eventCode === undefined || input.eventCode === ''
             ? null : integer(input.eventCode, null, -2147483648, 2147483647);
 
@@ -321,6 +322,7 @@ class DashboardRepository {
             let sql = '';
             if (eventLog) { sql += ' AND me.event_log_key = ?'; values.push(eventLog); }
             if (eventCode !== null) { sql += ' AND me.event_code = ?'; values.push(eventCode); }
+            if (eventCategory) { sql += ' AND ecl.event_category = ?'; values.push(eventCategory); }
             return addDateRange(sql, values, range, 'me.event_ts_utc');
         };
 
@@ -328,6 +330,7 @@ class DashboardRepository {
         const [countRows] = await this.database.execute(
             `SELECT COUNT(*) AS total FROM meter_events me
              JOIN devices d ON d.id = me.device_id
+             LEFT JOIN event_code_lookup ecl ON ecl.event_code = me.event_code
              WHERE d.device_uid = ?${filter(countValues)}`,
             countValues,
         );

@@ -143,6 +143,10 @@ pre { margin: 0; padding: 22px; max-height: 60vh; overflow: auto; color: #bcd1c9
 .triple b { color: var(--muted); font-size: 9px; }
 .empty-cell { padding: 38px !important; text-align: center; color: var(--muted); }
 .event-detail td { padding: 0; background: rgba(7,13,18,.72); }
+.event-tabs { display: flex; gap: 5px; padding: 12px 22px; overflow-x: auto; border-bottom: 1px solid var(--line); background: rgba(0,0,0,.08); }
+.event-tabs button { min-height: 34px; padding: 0 13px; white-space: nowrap; color: var(--muted); background: transparent; border: 1px solid transparent; border-radius: 7px; cursor: pointer; font-size: 11px; font-weight: 750; }
+.event-tabs button:hover { color: var(--text); background: rgba(255,255,255,.035); }
+.event-tabs button.active { color: #07110f; background: var(--accent); }
 .event-code { min-width: 260px; max-width: 360px; white-space: normal; display: grid; grid-template-columns: auto 1fr; gap: 3px 9px; align-items: baseline; }
 .event-code strong { color: var(--accent); font-size: 15px; }
 .event-code span { line-height: 1.35; }
