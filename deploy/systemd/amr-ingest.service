@@ -1,0 +1,19 @@
+# AMR TCP packet ingestion. Install steps: see "Server deployment" in README.md.
+# Edit WorkingDirectory and User to match the server before installing.
+[Unit]
+Description=AMR TCP packet ingestion
+Wants=network-online.target
+After=network-online.target mysql.service
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/server_new
+Environment=NODE_ENV=production
+ExecStart=/usr/bin/env node src/ingest.js
+Restart=always
+RestartSec=2
+TimeoutStopSec=20
+
+[Install]
+WantedBy=multi-user.target

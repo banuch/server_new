@@ -197,8 +197,24 @@ systemd unit has a different name, for example:
 SERVICE_NAME=my-dashboard ./scripts/pull-and-restart.sh
 ```
 
-When ingestion and the dashboard run as two systemd units, list both, or only
-the one whose code changed so device connections stay up:
+### Two systemd units
+
+`deploy/systemd/` contains `amr-ingest.service` and `amr-dashboard.service`,
+which run ingestion and the dashboard independently. First edit `User` and
+`WorkingDirectory` in both files to match the server. If Node.js was installed
+with nvm, replace `/usr/bin/env node` with the full path from `which node`.
+Then replace the single-process service:
+
+```bash
+sudo cp deploy/systemd/amr-*.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl disable --now dashboard-server
+sudo systemctl enable --now amr-ingest amr-dashboard
+```
+
+The old unit must be stopped first because it uses the same ports. When
+ingestion and the dashboard run as two systemd units, list both, or only the
+one whose code changed so device connections stay up:
 
 ```bash
 SERVICE_NAME="amr-ingest amr-dashboard" ./scripts/pull-and-restart.sh
