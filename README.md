@@ -1,8 +1,9 @@
 # AMR DLMS TCP Server
 
-Single Node.js application for receiving, logging, parsing, and persistently
-storing newline-delimited schema `2.1.0` packets from ESP32-based AMR devices.
-It also provides a read-only web dashboard and REST API for the stored data.
+Node.js application for receiving, logging, parsing, and persistently storing
+newline-delimited schema `2.1.0` packets from ESP32-based AMR devices. It also
+provides a read-only web dashboard and REST API for the stored data, served by
+a separate process.
 
 ## Dashboard
 
@@ -94,8 +95,19 @@ npm install
 npm start
 ```
 
-TCP ingestion and the HTTP dashboard run in the same process. They use separate
-ports so existing ESP32 devices can keep connecting to `TCP_PORT`.
+TCP ingestion and the HTTP dashboard run as separate processes on separate
+ports, so existing ESP32 devices can keep connecting to `TCP_PORT`. `npm start`
+runs a small supervisor that starts both and restarts either one if it exits
+unexpectedly; a dashboard crash never drops device connections. Each process
+has its own MySQL pool, and either one may apply pending schema migrations
+(a MySQL lock lets only one apply them at a time).
+
+To run and restart them independently, for example as two systemd services:
+
+```powershell
+npm run start:ingest     # TCP ingestion only
+npm run start:dashboard  # dashboard and REST API only
+```
 
 ## REST API
 
@@ -183,6 +195,14 @@ systemd unit has a different name, for example:
 
 ```bash
 SERVICE_NAME=my-dashboard ./scripts/pull-and-restart.sh
+```
+
+When ingestion and the dashboard run as two systemd units, list both, or only
+the one whose code changed so device connections stay up:
+
+```bash
+SERVICE_NAME="amr-ingest amr-dashboard" ./scripts/pull-and-restart.sh
+SERVICE_NAME=amr-dashboard ./scripts/pull-and-restart.sh
 ```
 
 With the server running, send a sample packet from another terminal:

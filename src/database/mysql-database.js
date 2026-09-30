@@ -36,8 +36,7 @@ class MysqlDatabase {
         this.output.log(`[DB] Ready: ${this.config.host}:${this.config.port}/${this.config.database}`);
     }
 
-    // Opens the pool against an existing, already migrated database. Used for
-    // additional pools next to the one that ran initialize().
+    // Opens the pool against an existing, already migrated database.
     async connect() {
         this.pool = mysql.createPool({
             host: this.config.host,
@@ -55,21 +54,42 @@ class MysqlDatabase {
     }
 
     async #migrate() {
-        await this.pool.query(`CREATE TABLE IF NOT EXISTS schema_migrations (
+        // The ingestion and dashboard processes start independently. A named
+        // lock makes the second one wait and then find nothing left to apply.
+        const connection = await this.pool.getConnection();
+        try {
+            const [[{ locked }]] = await connection.query(
+                'SELECT GET_LOCK(?, 60) AS locked',
+                [`${this.config.database}.schema_migrations`],
+            );
+            if (locked !== 1) throw new Error('timed out waiting for the schema migration lock');
+
+            try {
+                await this.#applyMigrations(connection);
+            } finally {
+                await connection.query('SELECT RELEASE_LOCK(?)', [`${this.config.database}.schema_migrations`]);
+            }
+        } finally {
+            connection.release();
+        }
+    }
+
+    async #applyMigrations(connection) {
+        await connection.query(`CREATE TABLE IF NOT EXISTS schema_migrations (
             version INT UNSIGNED NOT NULL,
             applied_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
             PRIMARY KEY (version)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
 
         for (const migration of MIGRATIONS) {
-            const [rows] = await this.pool.execute(
+            const [rows] = await connection.execute(
                 'SELECT version FROM schema_migrations WHERE version = ?',
                 [migration.version],
             );
             if (rows.length > 0) continue;
 
-            for (const statement of migration.statements) await this.pool.query(statement);
-            await this.pool.execute(
+            for (const statement of migration.statements) await connection.query(statement);
+            await connection.execute(
                 'INSERT INTO schema_migrations (version) VALUES (?)',
                 [migration.version],
             );

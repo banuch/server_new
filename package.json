@@ -6,6 +6,8 @@
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",
+    "start:ingest": "node src/ingest.js",
+    "start:dashboard": "node src/dashboard.js",
     "test": "node --test test/*.test.js",
     "db:reset": "node scripts/reset-database.js"
   },
