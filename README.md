@@ -75,7 +75,12 @@ DB_USER=root
 DB_PASSWORD=
 DB_NAME=amr_tcp_server
 DB_CONNECTION_LIMIT=10
+DB_WEB_CONNECTION_LIMIT=4
 ```
+
+Packet ingestion and the dashboard use separate MySQL pools:
+`DB_CONNECTION_LIMIT` sizes the ingestion pool and `DB_WEB_CONNECTION_LIMIT`
+the dashboard pool, so slow dashboard queries never delay packet storage.
 
 Operating-system environment variables override matching values in `.env`.
 The local `.env` is ignored by Git; `.env.example` is the safe configuration

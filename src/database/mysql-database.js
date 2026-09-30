@@ -31,6 +31,14 @@ class MysqlDatabase {
             await bootstrap.end();
         }
 
+        await this.connect();
+        await this.#migrate();
+        this.output.log(`[DB] Ready: ${this.config.host}:${this.config.port}/${this.config.database}`);
+    }
+
+    // Opens the pool against an existing, already migrated database. Used for
+    // additional pools next to the one that ran initialize().
+    async connect() {
         this.pool = mysql.createPool({
             host: this.config.host,
             port: this.config.port,
@@ -44,8 +52,6 @@ class MysqlDatabase {
         });
 
         await this.pool.query('SELECT 1');
-        await this.#migrate();
-        this.output.log(`[DB] Ready: ${this.config.host}:${this.config.port}/${this.config.database}`);
     }
 
     async #migrate() {

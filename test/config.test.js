@@ -31,3 +31,25 @@ test('loads values from an env file without replacing host environment values', 
         fs.rmSync(directory, { recursive: true, force: true });
     }
 });
+
+test('sizes the ingestion and dashboard database pools separately', () => {
+    const keys = ['DB_CONNECTION_LIMIT', 'DB_WEB_CONNECTION_LIMIT'];
+    const saved = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
+    const { loadConfig } = require('../src/config');
+
+    try {
+        process.env.DB_CONNECTION_LIMIT = '12';
+        process.env.DB_WEB_CONNECTION_LIMIT = '3';
+        const { mysql } = loadConfig();
+        assert.equal(mysql.connectionLimit, 12);
+        assert.equal(mysql.webConnectionLimit, 3);
+
+        process.env.DB_WEB_CONNECTION_LIMIT = '0';
+        assert.throws(() => loadConfig(), /DB_WEB_CONNECTION_LIMIT must be a positive integer/);
+    } finally {
+        for (const key of keys) {
+            if (saved[key] === undefined) delete process.env[key];
+            else process.env[key] = saved[key];
+        }
+    }
+});

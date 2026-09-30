@@ -47,6 +47,7 @@ function loadConfig() {
             password: process.env.DB_PASSWORD || '',
             database: process.env.DB_NAME || 'amr_tcp_server',
             connectionLimit: positiveInteger('DB_CONNECTION_LIMIT', 10),
+            webConnectionLimit: positiveInteger('DB_WEB_CONNECTION_LIMIT', 4),
         },
     };
 }

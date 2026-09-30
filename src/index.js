@@ -18,10 +18,17 @@ function listen(server, port, host) {
 async function main() {
     const config = loadConfig();
     const packetLogger = new PacketLogger(config.logDir);
+    // Separate pools so slow dashboard queries can never take the connections
+    // that packet ingestion needs.
     const database = new MysqlDatabase(config.mysql);
     await database.initialize();
+    const dashboardDatabase = new MysqlDatabase({
+        ...config.mysql,
+        connectionLimit: config.mysql.webConnectionLimit,
+    });
+    await dashboardDatabase.connect();
     const packetStore = new PacketRepository(database);
-    const dashboardStore = new DashboardRepository(database);
+    const dashboardStore = new DashboardRepository(dashboardDatabase);
     const tcpApp = createTcpServer(config, packetLogger, packetStore);
     const webApp = createWebServer(dashboardStore);
 
@@ -41,7 +48,7 @@ async function main() {
 
         try {
             await Promise.all([tcpApp.close(), webApp.close()]);
-            await database.close();
+            await Promise.all([database.close(), dashboardDatabase.close()]);
             process.exitCode = 0;
         } catch (error) {
             console.error(`[APP] Shutdown failed: ${error.message}`);
