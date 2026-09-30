@@ -7,20 +7,37 @@ a separate process.
 
 ## Dashboard
 
-After startup, open `http://localhost:3000`. The dashboard includes:
+After startup, open `http://localhost:3000`. The dashboard is read-only and has
+three sections:
 
-- summary cards for today's packet count, devices active during the last hour,
-  and the most recently received packet;
-- hourly or daily charts for voltage, current, active power, and energy;
-- per-device chart selection and average/sum aggregation;
-- a paginated packet ledger with device, meter serial, date-range, and text
-  filters;
-- a raw JSON viewer for each receipt; and
-- optional automatic refresh every 30 seconds.
+- **Fleet overview** — meter counts by communication status, rejected packets
+  in the last 24 hours, the last packet received, the meters that need
+  attention (most urgent first), and status by manufacturer.
+- **Meters** — every meter with its status, last packet time, R/Y/B voltage,
+  average current, active power, and imported energy; search, status and
+  manufacturer filters, sorting, and paging. Each meter opens a detail page
+  with Instantaneous, Energy & demand (registers, maximum demand, TOU zones),
+  Meter info, Load profile (chart over the whole selected range plus a paged
+  table), Billing, Events, Communication, and Packets tabs.
+- **Packet ledger** — every stored or rejected packet with its raw JSON.
 
-The dashboard reads the existing normalized tables and never modifies packet
-data. Chart.js is served locally with the application, so the dashboard does
-not depend on a public CDN.
+A meter's status comes from the receive time of its last valid packet:
+**Online** within `METER_ONLINE_AFTER_S` (default 600 s), **Delayed** until
+`METER_OFFLINE_AFTER_S` (default 1800 s), then **Offline**. **Last packet
+rejected** means the newest packet from the device failed validation. The
+server only receives packets, so it cannot tell association or authentication
+failures apart; they show as a meter going Delayed and then Offline. Values
+from a meter that is not online are marked stale, and a banner warns when the
+dashboard itself has not refreshed for more than two intervals.
+
+Status and live values refresh every 30 seconds while the page is visible;
+history tabs load only when opened, filtered, or refreshed by hand. All times
+are shown in `DISPLAY_TIMEZONE` (default `Asia/Kolkata`), which also defines
+the start of "today".
+
+The frontend is plain HTML, CSS, and JavaScript modules in `public/` with no
+build step. Chart.js is served locally with the application, so the dashboard
+does not depend on a public CDN.
 
 ## Protocol
 
@@ -69,6 +86,9 @@ IDLE_TIMEOUT_MS=120000
 
 WEB_HOST=0.0.0.0
 WEB_PORT=3000
+METER_ONLINE_AFTER_S=600
+METER_OFFLINE_AFTER_S=1800
+DISPLAY_TIMEZONE=Asia/Kolkata
 
 DB_HOST=127.0.0.1
 DB_PORT=3306
@@ -111,17 +131,28 @@ npm run start:dashboard  # dashboard and REST API only
 
 ## REST API
 
+- `GET /api/config` — status thresholds and display time zone.
+- `GET /api/fleet` — status counts, rejected packets in 24 h, meters needing
+  attention, and status by manufacturer.
+- `GET /api/meters` — every meter's latest values and status; optional
+  `search`, `status`, `manufacturer`, `sort=meter|status|last|power|energy|manufacturer`,
+  `dir=asc|desc`, `page`, and `pageSize`.
 - `GET /api/packets?page=1&pageSize=25` — packet list; optional filters are
-  `deviceId`, `meterSerial`, `search`, `from`, and `to`.
+  `deviceId`, `meterSerial`, `status=valid|invalid`, `search`, `from`, and `to`.
 - `GET /api/packets/:id` — complete raw payload for the JSON viewer.
 - `GET /api/packets/stats` — summary and chart series; optional filters are
   `deviceId`, `from`, `to`, `interval=hour|day`, and `aggregate=avg|sum`.
 - `GET /api/summary` — lightweight packet and active-device totals.
 - `GET /api/devices` — known devices and last-seen information.
-- `GET /api/devices/:deviceId/overview` — nameplate, latest instant values,
-  energy registers, counters, and communication health.
+- `GET /api/devices/:deviceId/overview` — nameplate, configuration, latest
+  instant values, energy registers, counters, communication health, profile
+  buffers, and communication status.
+- `GET /api/devices/:deviceId/energy` — latest maximum demand and TOU zones.
 - `GET /api/devices/:deviceId/block-load` — paginated interval load profile.
 - `GET /api/devices/:deviceId/daily-load` — paginated daily load survey.
+- `GET /api/devices/:deviceId/block-load/series` and `/daily-load/series` —
+  chart data for a date range, oldest first, at most 5,000 points.
+- `GET /api/devices/:deviceId/event-logs` — event log names stored for the meter.
 - `GET /api/devices/:deviceId/billing` — current billing snapshot and history.
 - `GET /api/devices/:deviceId/events` — event timeline and captured measurements.
 - `GET /api/health` — lightweight HTTP health check.

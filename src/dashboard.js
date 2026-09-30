@@ -14,7 +14,7 @@ async function startDashboard(config = loadConfig(), output = console) {
         connectionLimit: config.mysql.webConnectionLimit,
     });
     await database.initialize();
-    const webApp = createWebServer(new DashboardRepository(database));
+    const webApp = createWebServer(new DashboardRepository(database, config.dashboard), output, config.dashboard);
 
     await listen(webApp.server, config.webPort, config.webHost);
     output.log(`[WEB] Dashboard: http://${config.webHost}:${config.webPort}`);

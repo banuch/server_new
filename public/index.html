@@ -3,97 +3,65 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="description" content="AMR meter operations dashboard">
-    <title>AMR Meter Operations</title>
-    <link rel="stylesheet" href="/styles.css">
+    <meta name="description" content="AMR meter monitoring dashboard for DLMS energy meters">
+    <title>AMR Meter Monitoring</title>
+    <link rel="stylesheet" href="/css/app.css">
 </head>
 <body>
-    <header class="topbar">
-        <div class="brand"><span class="brand-mark" aria-hidden="true">AMR</span><div><h1>Meter Operations</h1><p>DLMS monitoring console</p></div></div>
-        <div class="header-actions">
-            <label class="device-picker">Active meter<select id="activeDevice"><option value="">Select a device</option></select></label>
-            <button id="refreshView" class="button ghost" type="button">Refresh</button>
-            <div id="liveState" class="live-state" role="status" title="Freshness of the selected meter's data"><span class="pulse"></span><span id="liveLabel">No data</span><small id="lastUpdated"></small></div>
+    <svg width="0" height="0" class="icon-sprite" aria-hidden="true">
+        <symbol id="i-ok" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/></symbol>
+        <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+        <symbol id="i-x" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m9 9 6 6m0-6-6 6"/></symbol>
+        <symbol id="i-warn" viewBox="0 0 24 24"><path d="M12 3 2 20h20L12 3z"/><path d="M12 10v4m0 3v.01"/></symbol>
+        <symbol id="i-minus" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8 12h8"/></symbol>
+        <symbol id="i-grid" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></symbol>
+        <symbol id="i-meter" viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 7h8v4H8zM8 15h2m4 0h2"/></symbol>
+        <symbol id="i-inbox" viewBox="0 0 24 24"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5 5h14l3 7v7H2v-7z"/></symbol>
+        <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></symbol>
+        <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 11A8 8 0 1 0 18 17M20 5v6h-6"/></symbol>
+        <symbol id="i-menu" viewBox="0 0 24 24"><path d="M3 6h18M3 12h18M3 18h18"/></symbol>
+        <symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></symbol>
+    </svg>
+
+    <div class="shell" id="shell">
+        <aside class="sidebar" id="sidebar">
+            <div class="brand"><b aria-hidden="true">AMR</b><div><strong>Meter Monitoring</strong><small>DLMS data acquisition</small></div></div>
+            <nav class="nav" aria-label="Main">
+                <a href="#/fleet" data-nav="fleet"><svg class="i" aria-hidden="true"><use href="#i-grid"/></svg>Fleet overview</a>
+                <a href="#/meters" data-nav="meters"><svg class="i" aria-hidden="true"><use href="#i-meter"/></svg>Meters <span id="navAlert" class="count hidden" title="Meters offline or rejecting packets"></span></a>
+                <a href="#/packets" data-nav="packets"><svg class="i" aria-hidden="true"><use href="#i-inbox"/></svg>Packet ledger</a>
+            </nav>
+            <div class="nav-foot" id="navFoot"></div>
+        </aside>
+        <div class="scrim" id="scrim"></div>
+
+        <div class="main">
+            <header class="topbar">
+                <button class="btn icon-only menu-btn" id="menuButton" type="button" aria-label="Open menu" aria-controls="sidebar" aria-expanded="false"><svg class="i" aria-hidden="true"><use href="#i-menu"/></svg></button>
+                <div class="crumb" id="crumb">Fleet overview</div>
+                <div class="global-search" id="globalSearch">
+                    <svg class="i" aria-hidden="true"><use href="#i-search"/></svg>
+                    <input id="globalSearchInput" type="search" autocomplete="off" placeholder="Find meter: serial, device ID, manufacturer" aria-label="Find meter" aria-controls="searchResults" aria-expanded="false">
+                    <div id="searchResults" class="search-results hidden" role="listbox"></div>
+                </div>
+                <div class="updated" id="updated" role="status" aria-live="polite"></div>
+                <button class="btn" id="refreshButton" type="button" title="Reload this page's data"><svg class="i" aria-hidden="true"><use href="#i-refresh"/></svg><span class="label">Refresh</span></button>
+            </header>
+
+            <div class="outdated hidden" id="outdated" role="alert"></div>
+            <main class="content" id="view" tabindex="-1"></main>
         </div>
-    </header>
+    </div>
 
-    <main>
-        <section class="summary-grid" aria-label="System summary">
-            <article class="summary-card"><span>Packets today</span><span class="summary-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg></span><strong id="packetsToday">—</strong><small>Since 00:00 UTC</small></article>
-            <article class="summary-card"><span>Active devices</span><span class="summary-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="5" width="14" height="14" rx="2"/><path d="M9 9h6v6H9zM9 1v4M15 1v4M9 19v4M15 19v4M1 9h4M1 15h4M19 9h4M19 15h4"/></svg></span><strong id="activeDevices">—</strong><small>Seen in the last hour</small></article>
-            <article class="summary-card"><span>Selected meter</span><span class="summary-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 14l4-4"/><path d="M3.34 19a10 10 0 1 1 17.32 0"/></svg></span><strong id="selectedMeter">—</strong><small id="selectedMeterMeta">Choose a device</small></article>
-            <article id="lastCommunicationCard" class="summary-card"><span>Last communication</span><span class="summary-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg></span><strong id="lastCommunication">—</strong><small id="lastCommunicationRelative">Waiting for data</small></article>
-        </section>
+    <div class="toasts" id="toasts" aria-live="polite"></div>
 
-        <nav class="section-tabs" role="tablist" aria-label="Dashboard sections">
-            <button class="section-tab active" data-view="overview" type="button" role="tab" aria-selected="true" aria-controls="view-overview">Overview</button>
-            <button class="section-tab" data-view="profiles" type="button" role="tab" aria-selected="false" aria-controls="view-profiles">Load profiles</button>
-            <button class="section-tab" data-view="billing" type="button" role="tab" aria-selected="false" aria-controls="view-billing">Billing</button>
-            <button class="section-tab" data-view="events" type="button" role="tab" aria-selected="false" aria-controls="view-events">Events</button>
-            <button class="section-tab" data-view="packets" type="button" role="tab" aria-selected="false" aria-controls="view-packets">Packets</button>
-        </nav>
+    <dialog id="packetDialog" aria-labelledby="dialogTitle">
+        <div class="dialog-head"><h2 id="dialogTitle">Packet</h2><button class="btn icon-only" id="closeDialog" type="button" aria-label="Close"><svg class="i" aria-hidden="true"><use href="#i-close"/></svg></button></div>
+        <div id="packetMeta" class="dialog-meta"></div>
+        <pre id="rawPayload"></pre>
+    </dialog>
 
-        <div id="notice" class="notice hidden" role="alert"><span id="noticeText"></span><button id="dismissNotice" type="button" aria-label="Dismiss">×</button></div>
-        <div id="devicePrompt" class="panel prompt-panel">Select an active meter to view its operational data.</div>
-
-        <section id="view-overview" class="dashboard-view">
-            <div class="overview-grid">
-                <article class="panel"><div class="panel-heading"><div><span class="eyebrow">Identity</span><h2>Name plate</h2></div><span id="meterStatus" class="status invalid">Unknown</span></div><dl id="nameplateGrid" class="detail-grid"></dl></article>
-                <article class="panel"><div class="panel-heading"><div><span class="eyebrow">Communication</span><h2>Device health</h2></div></div><dl id="healthGrid" class="detail-grid"></dl></article>
-            </div>
-            <section class="panel"><div class="panel-heading"><div><span class="eyebrow">Latest reading</span><h2>Instant values</h2></div><span id="readingTime" class="heading-note">—</span></div><div id="instantGrid" class="metric-grid"></div></section>
-            <div class="overview-grid">
-                <section class="panel"><div class="panel-heading"><div><span class="eyebrow">Registers</span><h2>Energy</h2></div></div><div id="energyGrid" class="metric-grid compact"></div></section>
-                <section class="panel"><div class="panel-heading"><div><span class="eyebrow">Meter state</span><h2>Counters</h2></div></div><dl id="counterGrid" class="detail-grid"></dl></section>
-            </div>
-        </section>
-
-        <section id="view-profiles" class="dashboard-view hidden">
-            <section class="panel">
-                <div class="panel-heading responsive-heading"><div><span class="eyebrow">Historical intervals</span><h2>Load profiles</h2></div><div class="segmented"><button class="active" data-profile="block" type="button">Block load</button><button data-profile="daily" type="button">Daily survey</button></div></div>
-                <form id="profileFilters" class="filters"><label>From <input id="profileFrom" type="datetime-local"></label><label>To <input id="profileTo" type="datetime-local"></label><label>Metric <select id="profileMetric"></select></label><button class="button primary" type="submit">Apply</button><div class="range-chips" role="group" aria-label="Quick range"><button type="button" data-range="24">24h</button><button type="button" data-range="168">7d</button><button type="button" data-range="720">30d</button><button class="active" type="button" data-range="">All</button></div></form>
-                <div class="chart-wrap"><canvas id="profileChart"></canvas><div id="profileChartEmpty" class="empty-state hidden">No profile readings found.</div></div>
-                <div class="table-scroll"><table><thead id="profileHead"></thead><tbody id="profileRows"></tbody></table></div>
-                <footer class="pagination"><span id="profilePageSummary">—</span><div><button id="profilePrevious" class="button ghost" type="button">Previous</button><button id="profileNext" class="button ghost" type="button">Next</button></div></footer>
-            </section>
-        </section>
-
-        <section id="view-billing" class="dashboard-view hidden">
-            <section class="panel"><div class="panel-heading"><div><span class="eyebrow">Latest snapshot</span><h2>Current billing</h2></div><span id="billingTime" class="heading-note">—</span></div><div id="billingSummary" class="metric-grid"></div></section>
-            <section class="panel">
-                <div class="panel-heading"><div><span class="eyebrow">Previous cycles</span><h2>Billing history</h2></div></div>
-                <form id="billingFilters" class="filters"><label>From <input id="billingFrom" type="date"></label><label>To <input id="billingTo" type="date"></label><button class="button primary" type="submit">Apply</button></form>
-                <div class="table-scroll"><table><thead><tr><th>Cycle</th><th>Billing date</th><th class="num">Active</th><th class="num">Apparent</th><th class="num">Reactive QI</th><th class="num">Reactive QIII</th><th class="num">System PF</th><th class="num">Duration</th><th class="num">Max demand</th><th class="num">Max apparent</th></tr></thead><tbody id="billingRows"></tbody></table><div id="billingEmpty" class="empty-state hidden">No billing history found.</div></div>
-                <footer class="pagination"><span id="billingPageSummary">—</span><div><button id="billingPrevious" class="button ghost" type="button">Previous</button><button id="billingNext" class="button ghost" type="button">Next</button></div></footer>
-            </section>
-        </section>
-
-        <section id="view-events" class="dashboard-view hidden"><section class="panel">
-            <div class="panel-heading"><div><span class="eyebrow">Meter exceptions</span><h2>Event timeline</h2></div></div>
-            <div class="event-tabs" role="tablist" aria-label="Event type">
-                <button class="active" data-event-category="" type="button" role="tab" aria-selected="true">All</button>
-                <button class="cat-voltage" data-event-category="Voltage related" type="button" role="tab" aria-selected="false">Voltage</button>
-                <button class="cat-current" data-event-category="Current related" type="button" role="tab" aria-selected="false">Current</button>
-                <button class="cat-power" data-event-category="Power failure related" type="button" role="tab" aria-selected="false">Power failure</button>
-                <button class="cat-transaction" data-event-category="Transaction related" type="button" role="tab" aria-selected="false">Transaction</button>
-                <button class="cat-other" data-event-category="Other events" type="button" role="tab" aria-selected="false">Other</button>
-                <button class="cat-non-rollover" data-event-category="Non-rollover events" type="button" role="tab" aria-selected="false">Non-rollover</button>
-                <button class="cat-control" data-event-category="Control events" type="button" role="tab" aria-selected="false">Control</button>
-            </div>
-            <form id="eventFilters" class="filters"><label>Event log <input id="eventLog" type="text" placeholder="e.g. event_log_4"></label><label>Event code <input id="eventCode" type="number" placeholder="Any code"></label><label>From <input id="eventFrom" type="datetime-local"></label><label>To <input id="eventTo" type="datetime-local"></label><button class="button primary" type="submit">Apply</button><button id="clearEventFilters" class="button ghost" type="button">Clear</button></form>
-            <div class="table-scroll"><table><thead><tr><th>Time</th><th>Log</th><th>Event</th><th>Voltage L1/L2/L3</th><th>Current L1/L2/L3</th><th>PF L1/L2/L3</th><th class="num">Active energy</th><th class="num">Apparent energy</th><th></th></tr></thead><tbody id="eventRows"></tbody></table><div id="eventEmpty" class="empty-state hidden">No events match these filters.</div></div>
-            <footer class="pagination"><span id="eventPageSummary">—</span><div><button id="eventPrevious" class="button ghost" type="button">Previous</button><button id="eventNext" class="button ghost" type="button">Next</button></div></footer>
-        </section></section>
-
-        <section id="view-packets" class="dashboard-view hidden"><section class="panel data-panel">
-            <div class="panel-heading table-heading"><div><span class="eyebrow">Diagnostics</span><h2>Packet ledger</h2></div><label class="toggle"><input id="autoRefresh" type="checkbox" checked><span></span> Refresh every 30s</label></div>
-            <form id="filterForm" class="filters"><label class="search-field">Search <input id="search" type="search" placeholder="Packet, device, serial, IP…"></label><label>Meter serial <input id="meterFilter" type="text" placeholder="Any serial"></label><label>From <input id="dateFrom" type="datetime-local"></label><label>To <input id="dateTo" type="datetime-local"></label><button class="button primary" type="submit">Filter</button><button id="clearFilters" class="button ghost" type="button">Clear</button></form>
-            <div class="table-scroll"><table><thead><tr><th>Packet</th><th>Status</th><th>Device</th><th>Meter</th><th>Received</th><th class="num">V L1</th><th class="num">I L1</th><th class="num">Energy</th><th class="num">Size</th><th></th></tr></thead><tbody id="packetRows"></tbody></table><div id="tableEmpty" class="empty-state hidden">No packets match these filters.</div></div>
-            <footer class="pagination"><span id="pageSummary">Loading packets…</span><div><button id="previousPage" class="button ghost" type="button">Previous</button><button id="nextPage" class="button ghost" type="button">Next</button></div></footer>
-        </section></section>
-    </main>
-
-    <dialog id="packetDialog"><div class="dialog-heading"><div><span class="eyebrow">Raw payload</span><h2 id="dialogTitle">Packet</h2></div><button id="closeDialog" class="icon-button" type="button" aria-label="Close">×</button></div><div id="packetMeta" class="packet-meta"></div><pre id="rawPayload"></pre></dialog>
-    <script src="/vendor/chart.js"></script><script src="/app.js"></script>
+    <script src="/vendor/chart.js"></script>
+    <script type="module" src="/js/main.js"></script>
 </body>
 </html>

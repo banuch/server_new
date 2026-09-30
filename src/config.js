@@ -24,6 +24,16 @@ function positiveInteger(name, fallback) {
     return value;
 }
 
+function timeZone(name, fallback) {
+    const value = process.env[name] || fallback;
+    try {
+        new Intl.DateTimeFormat('en', { timeZone: value });
+    } catch {
+        throw new Error(`${name} must be an IANA time zone such as Asia/Kolkata`);
+    }
+    return value;
+}
+
 function loadConfig() {
     loadEnvFile();
 
@@ -31,6 +41,11 @@ function loadConfig() {
     if (port > 65_535) throw new Error('TCP_PORT must be between 1 and 65535');
     const webPort = positiveInteger('WEB_PORT', 3000);
     if (webPort > 65_535) throw new Error('WEB_PORT must be between 1 and 65535');
+    const onlineAfterSeconds = positiveInteger('METER_ONLINE_AFTER_S', 600);
+    const offlineAfterSeconds = positiveInteger('METER_OFFLINE_AFTER_S', 1800);
+    if (offlineAfterSeconds < onlineAfterSeconds) {
+        throw new Error('METER_OFFLINE_AFTER_S must not be less than METER_ONLINE_AFTER_S');
+    }
 
     return {
         host: process.env.TCP_HOST || '0.0.0.0',
@@ -40,6 +55,11 @@ function loadConfig() {
         logDir: path.resolve(process.env.LOG_DIR || path.join(__dirname, '..', 'logs')),
         maxPacketBytes: positiveInteger('MAX_PACKET_BYTES', 256 * 1024),
         idleTimeoutMs: positiveInteger('IDLE_TIMEOUT_MS', 120_000),
+        dashboard: {
+            onlineAfterSeconds,
+            offlineAfterSeconds,
+            timeZone: timeZone('DISPLAY_TIMEZONE', 'Asia/Kolkata'),
+        },
         mysql: {
             host: process.env.DB_HOST || '127.0.0.1',
             port: positiveInteger('DB_PORT', 3306),

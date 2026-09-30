@@ -8,7 +8,9 @@ function asyncRoute(handler) {
     return (request, response, next) => Promise.resolve(handler(request, response, next)).catch(next);
 }
 
-function createWebServer(repository, output = console) {
+const DEFAULT_SETTINGS = { timeZone: 'Asia/Kolkata', onlineAfterSeconds: 600, offlineAfterSeconds: 1800 };
+
+function createWebServer(repository, output = console, settings = DEFAULT_SETTINGS) {
     const app = express();
     const publicDir = path.join(__dirname, '..', 'public');
     const chartPath = path.join(__dirname, '..', 'node_modules', 'chart.js', 'dist', 'chart.umd.js');
@@ -16,6 +18,43 @@ function createWebServer(repository, output = console) {
     app.disable('x-powered-by');
     app.use(express.json({ limit: '64kb' }));
     app.get('/vendor/chart.js', (request, response) => response.sendFile(chartPath));
+    // Meter data must never be served from a browser or proxy cache.
+    app.use('/api', (request, response, next) => {
+        response.set('Cache-Control', 'no-store');
+        next();
+    });
+
+    app.get('/api/config', (request, response) => {
+        response.json({
+            timeZone: settings.timeZone,
+            onlineAfterSeconds: settings.onlineAfterSeconds,
+            offlineAfterSeconds: settings.offlineAfterSeconds,
+        });
+    });
+
+    app.get('/api/fleet', asyncRoute(async (request, response) => {
+        response.json(await repository.getFleet());
+    }));
+
+    app.get('/api/meters', asyncRoute(async (request, response) => {
+        response.json(await repository.getMeters(request.query));
+    }));
+
+    app.get('/api/devices/:deviceId/energy', asyncRoute(async (request, response) => {
+        response.json(await repository.getEnergy(request.params.deviceId));
+    }));
+
+    app.get('/api/devices/:deviceId/event-logs', asyncRoute(async (request, response) => {
+        response.json({ logs: await repository.getEventLogs(request.params.deviceId) });
+    }));
+
+    app.get('/api/devices/:deviceId/block-load/series', asyncRoute(async (request, response) => {
+        response.json(await repository.getLoadProfileSeries('block', request.params.deviceId, request.query));
+    }));
+
+    app.get('/api/devices/:deviceId/daily-load/series', asyncRoute(async (request, response) => {
+        response.json(await repository.getLoadProfileSeries('daily', request.params.deviceId, request.query));
+    }));
 
     app.get('/api/packets', asyncRoute(async (request, response) => {
         response.json(await repository.getPackets(request.query));
@@ -62,7 +101,9 @@ function createWebServer(repository, output = console) {
     }));
 
     app.get('/api/health', (request, response) => response.json({ status: 'ok' }));
-    app.use(express.static(publicDir));
+    // Revalidate on every load so a deployment never leaves a browser running
+    // an old script against a newer API; unchanged files return 304.
+    app.use(express.static(publicDir, { setHeaders: (response) => response.set('Cache-Control', 'no-cache') }));
 
     app.use('/api', (request, response) => {
         response.status(404).json({ error: 'API endpoint not found' });

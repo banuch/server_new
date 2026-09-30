@@ -29,7 +29,11 @@ test('serves the dashboard and REST packet results', async () => {
     try {
         const page = await fetch(baseUrl);
         assert.equal(page.status, 200);
-        assert.match(await page.text(), /AMR Meter Operations/);
+        assert.match(await page.text(), /AMR Meter Monitoring/);
+
+        const script = await fetch(`${baseUrl}/js/main.js`);
+        assert.equal(script.status, 200);
+        assert.match(script.headers.get('content-type'), /javascript/);
 
         const packets = await fetch(`${baseUrl}/api/packets`).then((response) => response.json());
         assert.equal(packets.rows[0].id, 1);
@@ -42,6 +46,41 @@ test('serves the dashboard and REST packet results', async () => {
 
         const events = await fetch(`${baseUrl}/api/devices/MRI-001/events`).then((response) => response.json());
         assert.deepEqual(events.rows, []);
+    } finally {
+        await web.close();
+    }
+});
+
+test('serves fleet, meter list, energy, and chart series without caching', async () => {
+    const calls = [];
+    const repository = {
+        async getFleet() { return { counts: { total: 2 } }; },
+        async getMeters(input) { calls.push(['meters', input]); return { rows: [], counts: {} }; },
+        async getEnergy(id) { calls.push(['energy', id]); return { maxDemand: {}, tou: [] }; },
+        async getEventLogs() { return ['event_log_1']; },
+        async getLoadProfileSeries(type, id) { calls.push(['series', type, id]); return { rows: [] }; },
+    };
+    const output = { log() {}, error() {} };
+    const web = createWebServer(repository, output, { timeZone: 'UTC', onlineAfterSeconds: 600, offlineAfterSeconds: 1800 });
+    await new Promise((resolve) => web.server.listen(0, '127.0.0.1', resolve));
+    const baseUrl = `http://127.0.0.1:${web.server.address().port}`;
+    try {
+        const fleet = await fetch(`${baseUrl}/api/fleet`);
+        assert.equal(fleet.headers.get('cache-control'), 'no-store');
+        assert.equal((await fleet.json()).counts.total, 2);
+
+        const config = await fetch(`${baseUrl}/api/config`).then((response) => response.json());
+        assert.deepEqual(config, { timeZone: 'UTC', onlineAfterSeconds: 600, offlineAfterSeconds: 1800 });
+
+        await fetch(`${baseUrl}/api/meters?status=offline`);
+        await fetch(`${baseUrl}/api/devices/MRI-001/energy`);
+        await fetch(`${baseUrl}/api/devices/MRI-001/daily-load/series`);
+        const logs = await fetch(`${baseUrl}/api/devices/MRI-001/event-logs`).then((response) => response.json());
+
+        assert.equal(calls[0][1].status, 'offline');
+        assert.deepEqual(calls[1], ['energy', 'MRI-001']);
+        assert.deepEqual(calls[2], ['series', 'daily', 'MRI-001']);
+        assert.deepEqual(logs, { logs: ['event_log_1'] });
     } finally {
         await web.close();
     }
