@@ -135,3 +135,64 @@ test('stores a direct device-less delta packet using its TCP client identity', a
     assert.match(deviceInsert.sql, /COALESCE\(VALUES\(meter_serial\), meter_serial\)/);
     assert.equal(calls.some((call) => call.sql.includes('INSERT INTO cycle_configs')), false);
 });
+
+test('writes profile and event rows with one multi-row statement per table', async () => {
+    const calls = [];
+    let nextId = 200;
+    const connection = {
+        async beginTransaction() {},
+        async execute(sql, values) {
+            calls.push({ sql, values });
+            if (sql.includes('SELECT id, event_log_key')) {
+                return [[
+                    { id: 901, event_log_key: 'event_log_1', event_ts_utc: new Date('2026-09-22T07:00:00Z'), event_code: 101 },
+                    { id: 902, event_log_key: 'event_log_1', event_ts_utc: new Date('2026-09-22T07:05:00Z'), event_code: 102 },
+                ]];
+            }
+            return [{ insertId: nextId++ }];
+        },
+        async commit() {},
+        async rollback() {},
+        release() {},
+    };
+    const repository = new PacketRepository({ async getConnection() { return connection; } });
+    const blockLoad = Array.from({ length: 10 }, (_, index) => ({
+        ts: `2026-09-22T0${Math.floor(index / 4)}:${String((index % 4) * 15).padStart(2, '0')}:00Z`,
+        v_l1_v: 230 + index,
+    }));
+    const raw = JSON.stringify({
+        schema_version: '2.1.0',
+        device: { device_id: 'MRI-BATCH-001' },
+        cycle: { id: 7, ts_utc: '2026-09-22T08:00:00Z' },
+        profiles: { block_load: { obis: '1.0.99.1.0.255', units: { v: 'V', i: 'A' }, latest_10: blockLoad } },
+        events: {
+            event_log_1: {
+                obis: '0.0.99.98.0.255',
+                latest_10: [
+                    { ts: '2026-09-22T07:00:00Z', event_code: 101, snapshot: { voltage_l1_v: 180 } },
+                    { ts: '2026-09-22T07:05:00Z', event_code: 102 },
+                ],
+            },
+        },
+    });
+
+    const result = await repository.savePacket({
+        receivedAt: '2026-09-22T08:00:01.000Z',
+        clientIp: '127.0.0.1', clientPort: 1234, bytes: Buffer.byteLength(raw), raw,
+    });
+
+    assert.equal(result.status, 'success');
+    const inserts = (table) => calls.filter((call) => call.sql.includes(`INSERT INTO ${table} `));
+    assert.equal(inserts('block_load_entries').length, 1);
+    assert.equal(inserts('block_load_entries')[0].values.length, 10 * 13);
+    assert.equal(inserts('profile_units').length, 1);
+    assert.equal(inserts('profile_units')[0].values.length, 2 * 4);
+    assert.equal(inserts('meter_events').length, 1);
+    assert.equal(inserts('meter_events')[0].values.length, 2 * 5);
+
+    const measurements = inserts('event_measurements');
+    assert.equal(measurements.length, 1);
+    assert.equal(measurements[0].values.length, 12);
+    assert.equal(measurements[0].values[0], 901);
+    assert.equal(measurements[0].values[4], 180);
+});

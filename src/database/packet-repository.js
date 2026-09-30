@@ -39,6 +39,19 @@ function receiptDeviceId(record, parsed) {
     return transportDeviceId(record);
 }
 
+// Writes all rows in one multi-row upsert so a packet costs one round trip per
+// table instead of one per row. Column names are internal constants, never input.
+async function upsertRows(connection, table, columns, updateColumns, rows) {
+    if (rows.length === 0) return;
+    const tuple = `(${columns.map(() => '?').join(', ')})`;
+    await connection.execute(
+        `INSERT INTO ${table} (${columns.join(', ')})
+         VALUES ${rows.map(() => tuple).join(', ')}
+         ON DUPLICATE KEY UPDATE ${updateColumns.map((column) => `${column}=VALUES(${column})`).join(', ')}`,
+        rows.flat(),
+    );
+}
+
 class PacketRepository {
     constructor(database) {
         this.database = database;
@@ -228,35 +241,29 @@ class PacketRepository {
         );
 
         const maxDemand = readings.max_demand || {};
-        for (const [type, source] of [['live', maxDemand.live], ['billing_cycle', maxDemand.billing_cycle]]) {
-            if (!source) continue;
-            await connection.execute(
-                `INSERT INTO max_demand_readings
-                    (cycle_id, demand_type, active_demand_w, active_demand_ts_utc,
-                     apparent_demand_va, apparent_demand_ts_utc)
-                 VALUES (?, ?, ?, ?, ?, ?)
-                 ON DUPLICATE KEY UPDATE active_demand_w=VALUES(active_demand_w),
-                    active_demand_ts_utc=VALUES(active_demand_ts_utc), apparent_demand_va=VALUES(apparent_demand_va),
-                    apparent_demand_ts_utc=VALUES(apparent_demand_ts_utc)`,
-                [cycleId, type, nullable(source.active_kw_w), mysqlDate(source.active_kw_ts),
-                    nullable(source.apparent_kva_va), mysqlDate(source.apparent_kva_ts)],
-            );
-        }
+        await upsertRows(
+            connection,
+            'max_demand_readings',
+            ['cycle_id', 'demand_type', 'active_demand_w', 'active_demand_ts_utc',
+                'apparent_demand_va', 'apparent_demand_ts_utc'],
+            ['active_demand_w', 'active_demand_ts_utc', 'apparent_demand_va', 'apparent_demand_ts_utc'],
+            [['live', maxDemand.live], ['billing_cycle', maxDemand.billing_cycle]]
+                .filter(([, source]) => source)
+                .map(([type, source]) => [cycleId, type, nullable(source.active_kw_w), mysqlDate(source.active_kw_ts),
+                    nullable(source.apparent_kva_va), mysqlDate(source.apparent_kva_ts)]),
+        );
 
-        for (const zone of Array.isArray(readings.tou) ? readings.tou : []) {
-            await connection.execute(
-                `INSERT INTO tou_readings
-                    (cycle_id, zone_number, energy_kwh, apparent_energy_kvah, max_demand_w,
-                     max_demand_ts_utc, max_apparent_demand_va, max_apparent_demand_ts_utc)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                 ON DUPLICATE KEY UPDATE energy_kwh=VALUES(energy_kwh), apparent_energy_kvah=VALUES(apparent_energy_kvah),
-                    max_demand_w=VALUES(max_demand_w), max_demand_ts_utc=VALUES(max_demand_ts_utc),
-                    max_apparent_demand_va=VALUES(max_apparent_demand_va),
-                    max_apparent_demand_ts_utc=VALUES(max_apparent_demand_ts_utc)`,
-                [cycleId, zone.zone, nullable(zone.kwh), nullable(zone.kvah), nullable(zone.md_kw_w),
-                    mysqlDate(zone.md_kw_ts), nullable(zone.md_kva_va), mysqlDate(zone.md_kva_ts)],
-            );
-        }
+        await upsertRows(
+            connection,
+            'tou_readings',
+            ['cycle_id', 'zone_number', 'energy_kwh', 'apparent_energy_kvah', 'max_demand_w',
+                'max_demand_ts_utc', 'max_apparent_demand_va', 'max_apparent_demand_ts_utc'],
+            ['energy_kwh', 'apparent_energy_kvah', 'max_demand_w', 'max_demand_ts_utc',
+                'max_apparent_demand_va', 'max_apparent_demand_ts_utc'],
+            (Array.isArray(readings.tou) ? readings.tou : []).map((zone) => [
+                cycleId, zone.zone, nullable(zone.kwh), nullable(zone.kvah), nullable(zone.md_kw_w),
+                mysqlDate(zone.md_kw_ts), nullable(zone.md_kva_va), mysqlDate(zone.md_kva_ts)]),
+        );
     }
 
     async #saveBilling(connection, deviceId, cycleId, billing) {
@@ -282,138 +289,148 @@ class PacketRepository {
             );
         }
 
-        for (const item of Array.isArray(billing.history) ? billing.history : []) {
-            if (item.billing_date == null || item.cycle == null) continue;
-            await connection.execute(
-                `INSERT INTO billing_history
-                    (device_id, billing_cycle_number, billing_date_utc, active_import_wh,
-                     apparent_import_vah, reactive_qi_varh, reactive_qiii_varh, system_power_factor,
-                     cumulative_duration_minutes, max_demand_w, max_apparent_demand_va, last_seen_cycle_id)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                 ON DUPLICATE KEY UPDATE active_import_wh=VALUES(active_import_wh),
-                    apparent_import_vah=VALUES(apparent_import_vah), reactive_qi_varh=VALUES(reactive_qi_varh),
-                    reactive_qiii_varh=VALUES(reactive_qiii_varh), system_power_factor=VALUES(system_power_factor),
-                    cumulative_duration_minutes=VALUES(cumulative_duration_minutes), max_demand_w=VALUES(max_demand_w),
-                    max_apparent_demand_va=VALUES(max_apparent_demand_va), last_seen_cycle_id=VALUES(last_seen_cycle_id)`,
-                [deviceId, item.cycle, mysqlDate(item.billing_date), nullable(item.active_import_wh),
+        await upsertRows(
+            connection,
+            'billing_history',
+            ['device_id', 'billing_cycle_number', 'billing_date_utc', 'active_import_wh',
+                'apparent_import_vah', 'reactive_qi_varh', 'reactive_qiii_varh', 'system_power_factor',
+                'cumulative_duration_minutes', 'max_demand_w', 'max_apparent_demand_va', 'last_seen_cycle_id'],
+            ['active_import_wh', 'apparent_import_vah', 'reactive_qi_varh', 'reactive_qiii_varh',
+                'system_power_factor', 'cumulative_duration_minutes', 'max_demand_w', 'max_apparent_demand_va',
+                'last_seen_cycle_id'],
+            (Array.isArray(billing.history) ? billing.history : [])
+                .filter((item) => item.billing_date != null && item.cycle != null)
+                .map((item) => [deviceId, item.cycle, mysqlDate(item.billing_date), nullable(item.active_import_wh),
                     nullable(item.apparent_import_vah), nullable(item.reactive_qi_varh), nullable(item.reactive_qiii_varh),
                     item.system_pf_x1000 == null ? null : item.system_pf_x1000 / 1000,
-                    nullable(item.cumulative_duration_min), nullable(item.md_kw_w), nullable(item.md_kva_va), cycleId],
-            );
-        }
+                    nullable(item.cumulative_duration_min), nullable(item.md_kw_w), nullable(item.md_kva_va), cycleId]),
+        );
     }
 
     async #saveProfiles(connection, deviceId, cycleId, profiles) {
+        const snapshots = [];
+        const units = [];
         for (const [profileType, profile] of Object.entries(profiles)) {
             if (!profile || typeof profile !== 'object') continue;
-            await connection.execute(
-                `INSERT INTO profile_snapshots
-                    (cycle_id, profile_type, obis, entries_in_use, profile_capacity,
-                     rows_returned, interval_minutes, buffer_full, note)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                 ON DUPLICATE KEY UPDATE obis=VALUES(obis), entries_in_use=VALUES(entries_in_use),
-                    profile_capacity=VALUES(profile_capacity), rows_returned=VALUES(rows_returned),
-                    interval_minutes=VALUES(interval_minutes), buffer_full=VALUES(buffer_full), note=VALUES(note)`,
-                [cycleId, profileType, nullable(profile.obis), nullable(profile.entries_in_use),
-                    nullable(profile.profile_capacity), nullable(profile.rows_returned), nullable(profile.interval_min),
-                    nullable(profile.buffer_full), nullable(profile.note)],
-            );
-
+            snapshots.push([cycleId, profileType, nullable(profile.obis), nullable(profile.entries_in_use),
+                nullable(profile.profile_capacity), nullable(profile.rows_returned), nullable(profile.interval_min),
+                nullable(profile.buffer_full), nullable(profile.note)]);
             for (const [measurementKey, unitSymbol] of Object.entries(profile.units || {})) {
-                await connection.execute(
-                    `INSERT INTO profile_units
-                        (cycle_id, profile_type, measurement_key, unit_symbol)
-                     VALUES (?, ?, ?, ?)
-                     ON DUPLICATE KEY UPDATE unit_symbol=VALUES(unit_symbol)`,
-                    [cycleId, profileType, measurementKey, String(unitSymbol)],
-                );
+                units.push([cycleId, profileType, measurementKey, String(unitSymbol)]);
             }
         }
 
-        for (const entry of profiles.block_load?.latest_10 || []) {
-            if (!entry.ts) continue;
-            await connection.execute(
-                `INSERT INTO block_load_entries
-                    (device_id, reading_ts_utc, current_l1_a, current_l2_a, current_l3_a,
-                     voltage_l1_v, voltage_l2_v, voltage_l3_v, active_energy_wh, reactive_lag_varh,
-                     reactive_lead_varh, apparent_energy_vah, last_seen_cycle_id)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                 ON DUPLICATE KEY UPDATE current_l1_a=VALUES(current_l1_a), current_l2_a=VALUES(current_l2_a),
-                    current_l3_a=VALUES(current_l3_a), voltage_l1_v=VALUES(voltage_l1_v),
-                    voltage_l2_v=VALUES(voltage_l2_v), voltage_l3_v=VALUES(voltage_l3_v),
-                    active_energy_wh=VALUES(active_energy_wh), reactive_lag_varh=VALUES(reactive_lag_varh),
-                    reactive_lead_varh=VALUES(reactive_lead_varh), apparent_energy_vah=VALUES(apparent_energy_vah),
-                    last_seen_cycle_id=VALUES(last_seen_cycle_id)`,
-                [deviceId, mysqlDate(entry.ts), nullable(entry.i_l1_a), nullable(entry.i_l2_a), nullable(entry.i_l3_a),
-                    nullable(entry.v_l1_v), nullable(entry.v_l2_v), nullable(entry.v_l3_v), nullable(entry.kwh_wh),
-                    nullable(entry.kvarh_lag_varh), nullable(entry.kvarh_lead_varh), nullable(entry.kvah_vah), cycleId],
-            );
-        }
+        await upsertRows(
+            connection,
+            'profile_snapshots',
+            ['cycle_id', 'profile_type', 'obis', 'entries_in_use', 'profile_capacity',
+                'rows_returned', 'interval_minutes', 'buffer_full', 'note'],
+            ['obis', 'entries_in_use', 'profile_capacity', 'rows_returned', 'interval_minutes', 'buffer_full', 'note'],
+            snapshots,
+        );
 
-        for (const entry of profiles.daily_load?.latest_10 || []) {
-            if (!entry.ts) continue;
-            await connection.execute(
-                `INSERT INTO daily_load_entries
-                    (device_id, reading_ts_utc, active_energy_wh, reactive_qi_varh,
-                     reactive_qiii_varh, apparent_energy_vah, on_minutes, off_minutes,
-                     missing_minutes, last_seen_cycle_id)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                 ON DUPLICATE KEY UPDATE active_energy_wh=VALUES(active_energy_wh),
-                    reactive_qi_varh=VALUES(reactive_qi_varh), reactive_qiii_varh=VALUES(reactive_qiii_varh),
-                    apparent_energy_vah=VALUES(apparent_energy_vah), on_minutes=VALUES(on_minutes),
-                    off_minutes=VALUES(off_minutes), missing_minutes=VALUES(missing_minutes),
-                    last_seen_cycle_id=VALUES(last_seen_cycle_id)`,
-                [deviceId, mysqlDate(entry.ts), nullable(entry.active_wh), nullable(entry.react_qi_varh),
+        await upsertRows(
+            connection,
+            'profile_units',
+            ['cycle_id', 'profile_type', 'measurement_key', 'unit_symbol'],
+            ['unit_symbol'],
+            units,
+        );
+
+        await upsertRows(
+            connection,
+            'block_load_entries',
+            ['device_id', 'reading_ts_utc', 'current_l1_a', 'current_l2_a', 'current_l3_a',
+                'voltage_l1_v', 'voltage_l2_v', 'voltage_l3_v', 'active_energy_wh', 'reactive_lag_varh',
+                'reactive_lead_varh', 'apparent_energy_vah', 'last_seen_cycle_id'],
+            ['current_l1_a', 'current_l2_a', 'current_l3_a', 'voltage_l1_v', 'voltage_l2_v', 'voltage_l3_v',
+                'active_energy_wh', 'reactive_lag_varh', 'reactive_lead_varh', 'apparent_energy_vah',
+                'last_seen_cycle_id'],
+            (profiles.block_load?.latest_10 || [])
+                .filter((entry) => entry.ts)
+                .map((entry) => [deviceId, mysqlDate(entry.ts), nullable(entry.i_l1_a), nullable(entry.i_l2_a),
+                    nullable(entry.i_l3_a), nullable(entry.v_l1_v), nullable(entry.v_l2_v), nullable(entry.v_l3_v),
+                    nullable(entry.kwh_wh), nullable(entry.kvarh_lag_varh), nullable(entry.kvarh_lead_varh),
+                    nullable(entry.kvah_vah), cycleId]),
+        );
+
+        await upsertRows(
+            connection,
+            'daily_load_entries',
+            ['device_id', 'reading_ts_utc', 'active_energy_wh', 'reactive_qi_varh',
+                'reactive_qiii_varh', 'apparent_energy_vah', 'on_minutes', 'off_minutes',
+                'missing_minutes', 'last_seen_cycle_id'],
+            ['active_energy_wh', 'reactive_qi_varh', 'reactive_qiii_varh', 'apparent_energy_vah',
+                'on_minutes', 'off_minutes', 'missing_minutes', 'last_seen_cycle_id'],
+            (profiles.daily_load?.latest_10 || [])
+                .filter((entry) => entry.ts)
+                .map((entry) => [deviceId, mysqlDate(entry.ts), nullable(entry.active_wh), nullable(entry.react_qi_varh),
                     nullable(entry.react_qiii_varh), nullable(entry.apparent_vah), nullable(entry.on_min),
-                    nullable(entry.off_min), nullable(entry.missing_min), cycleId],
-            );
-        }
+                    nullable(entry.off_min), nullable(entry.missing_min), cycleId]),
+        );
     }
 
     async #saveEvents(connection, deviceId, cycleId, events) {
+        const snapshots = [];
+        const meterEvents = [];
+        const measurements = new Map();
         for (const [logKey, eventLog] of Object.entries(events)) {
             if (!eventLog || typeof eventLog !== 'object') continue;
-            await connection.execute(
-                `INSERT INTO event_profile_snapshots
-                    (cycle_id, event_log_key, obis, rows_returned, entries_in_use, profile_capacity)
-                 VALUES (?, ?, ?, ?, ?, ?)
-                 ON DUPLICATE KEY UPDATE obis=VALUES(obis), rows_returned=VALUES(rows_returned),
-                    entries_in_use=VALUES(entries_in_use), profile_capacity=VALUES(profile_capacity)`,
-                [cycleId, logKey, nullable(eventLog.obis), nullable(eventLog.rows_returned),
-                    nullable(eventLog.entries_in_use), nullable(eventLog.profile_capacity)],
-            );
+            snapshots.push([cycleId, logKey, nullable(eventLog.obis), nullable(eventLog.rows_returned),
+                nullable(eventLog.entries_in_use), nullable(eventLog.profile_capacity)]);
 
             for (const entry of eventLog.latest_10 || []) {
                 if (!entry.ts) continue;
-                const [result] = await connection.execute(
-                    `INSERT INTO meter_events
-                        (device_id, event_log_key, event_ts_utc, event_code, last_seen_cycle_id)
-                     VALUES (?, ?, ?, ?, ?)
-                     ON DUPLICATE KEY UPDATE id=LAST_INSERT_ID(id), last_seen_cycle_id=VALUES(last_seen_cycle_id)`,
-                    [deviceId, logKey, mysqlDate(entry.ts), eventCode(entry), cycleId],
-                );
-
-                if (!entry.snapshot) continue;
-                const s = entry.snapshot;
-                await connection.execute(
-                    `INSERT INTO event_measurements
-                        (event_id, current_l1_a, current_l2_a, current_l3_a,
-                         voltage_l1_v, voltage_l2_v, voltage_l3_v, power_factor_l1,
-                         power_factor_l2, power_factor_l3, active_import_wh, apparent_import_vah)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                     ON DUPLICATE KEY UPDATE current_l1_a=VALUES(current_l1_a), current_l2_a=VALUES(current_l2_a),
-                        current_l3_a=VALUES(current_l3_a), voltage_l1_v=VALUES(voltage_l1_v),
-                        voltage_l2_v=VALUES(voltage_l2_v), voltage_l3_v=VALUES(voltage_l3_v),
-                        power_factor_l1=VALUES(power_factor_l1), power_factor_l2=VALUES(power_factor_l2),
-                        power_factor_l3=VALUES(power_factor_l3), active_import_wh=VALUES(active_import_wh),
-                        apparent_import_vah=VALUES(apparent_import_vah)`,
-                    [result.insertId, nullable(s.current_l1_a), nullable(s.current_l2_a), nullable(s.current_l3_a),
-                        nullable(s.voltage_l1_v), nullable(s.voltage_l2_v), nullable(s.voltage_l3_v),
-                        nullable(s.power_factor_l1), nullable(s.power_factor_l2), nullable(s.power_factor_l3),
-                        nullable(s.active_import_wh), nullable(s.apparent_import_vah)],
-                );
+                const row = [deviceId, logKey, mysqlDate(entry.ts), eventCode(entry), cycleId];
+                meterEvents.push(row);
+                if (entry.snapshot) measurements.set(`${row[1]}|${row[2]}|${row[3]}`, entry.snapshot);
             }
         }
+
+        await upsertRows(
+            connection,
+            'event_profile_snapshots',
+            ['cycle_id', 'event_log_key', 'obis', 'rows_returned', 'entries_in_use', 'profile_capacity'],
+            ['obis', 'rows_returned', 'entries_in_use', 'profile_capacity'],
+            snapshots,
+        );
+
+        await upsertRows(
+            connection,
+            'meter_events',
+            ['device_id', 'event_log_key', 'event_ts_utc', 'event_code', 'last_seen_cycle_id'],
+            ['last_seen_cycle_id'],
+            meterEvents,
+        );
+        if (measurements.size === 0) return;
+
+        // A multi-row upsert does not return one id per row. Every event written
+        // above now carries this cycle id, which the foreign-key index can find.
+        const [eventRows] = await connection.execute(
+            `SELECT id, event_log_key, event_ts_utc, event_code
+             FROM meter_events WHERE device_id = ? AND last_seen_cycle_id = ?`,
+            [deviceId, cycleId],
+        );
+        const measurementRows = [];
+        for (const event of eventRows) {
+            const s = measurements.get(`${event.event_log_key}|${mysqlDate(event.event_ts_utc)}|${event.event_code}`);
+            if (!s) continue;
+            measurementRows.push([event.id, nullable(s.current_l1_a), nullable(s.current_l2_a), nullable(s.current_l3_a),
+                nullable(s.voltage_l1_v), nullable(s.voltage_l2_v), nullable(s.voltage_l3_v),
+                nullable(s.power_factor_l1), nullable(s.power_factor_l2), nullable(s.power_factor_l3),
+                nullable(s.active_import_wh), nullable(s.apparent_import_vah)]);
+        }
+
+        await upsertRows(
+            connection,
+            'event_measurements',
+            ['event_id', 'current_l1_a', 'current_l2_a', 'current_l3_a', 'voltage_l1_v', 'voltage_l2_v',
+                'voltage_l3_v', 'power_factor_l1', 'power_factor_l2', 'power_factor_l3',
+                'active_import_wh', 'apparent_import_vah'],
+            ['current_l1_a', 'current_l2_a', 'current_l3_a', 'voltage_l1_v', 'voltage_l2_v', 'voltage_l3_v',
+                'power_factor_l1', 'power_factor_l2', 'power_factor_l3', 'active_import_wh', 'apparent_import_vah'],
+            measurementRows,
+        );
     }
 
     async #saveHealth(connection, cycleId, health) {
