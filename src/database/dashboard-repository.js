@@ -51,29 +51,34 @@ function addDateRange(sql, values, range, column) {
     return result;
 }
 
-function addFilters(query, values, filters, alias = 'pr') {
+// Filters reference packet_receipts only, so counting and paging never need
+// the cycle and device joins. source_device_uid holds the same id as the
+// linked device (backfilled by migration 6), and a meter serial is resolved
+// through the small devices table.
+function addFilters(query, values, filters) {
     const clauses = [];
     if (filters.deviceId) {
-        clauses.push('COALESCE(d.device_uid, pr.source_device_uid) = ?');
+        clauses.push('pr.source_device_uid = ?');
         values.push(filters.deviceId);
     }
     if (filters.meterSerial) {
-        clauses.push('d.meter_serial = ?');
+        clauses.push('pr.source_device_uid IN (SELECT device_uid FROM devices WHERE meter_serial = ?)');
         values.push(filters.meterSerial);
     }
     if (filters.from) {
-        clauses.push(`${alias}.received_at >= ?`);
+        clauses.push('pr.received_at >= ?');
         values.push(filters.from);
     }
     if (filters.to) {
-        clauses.push(`${alias}.received_at <= ?`);
+        clauses.push('pr.received_at <= ?');
         values.push(filters.to);
     }
     if (filters.search) {
         const term = `%${filters.search}%`;
         clauses.push(`(
-            CAST(${alias}.id AS CHAR) LIKE ? OR COALESCE(d.device_uid, pr.source_device_uid) LIKE ? OR d.meter_serial LIKE ?
-            OR ${alias}.client_ip LIKE ? OR ${alias}.parse_status LIKE ? OR ${alias}.parse_error LIKE ?
+            CAST(pr.id AS CHAR) LIKE ? OR pr.source_device_uid LIKE ?
+            OR pr.source_device_uid IN (SELECT device_uid FROM devices WHERE meter_serial LIKE ?)
+            OR pr.client_ip LIKE ? OR pr.parse_status LIKE ? OR pr.parse_error LIKE ?
         )`);
         values.push(term, term, term, term, term, term);
     }
@@ -100,38 +105,33 @@ class DashboardRepository {
         }
 
         const countValues = [];
-        const countSql = addFilters(
-            `SELECT COUNT(*) AS total
-             FROM packet_receipts pr
-             LEFT JOIN packet_cycle_links pcl ON pcl.receipt_id = pr.id
-             LEFT JOIN measurement_cycles mc ON mc.id = pcl.cycle_id
-             LEFT JOIN devices d ON d.id = mc.device_id`,
-            countValues,
-            filters,
-        );
+        const countSql = addFilters('SELECT COUNT(*) AS total FROM packet_receipts pr', countValues, filters);
         const [countRows] = await this.database.execute(countSql, countValues);
         const total = Number(countRows[0]?.total || 0);
 
+        // Pick the page's receipt ids first, then join details for those rows
+        // only, so skipped rows of deep pages are never joined.
         const values = [];
-        let sql = addFilters(
+        const pageSql = addFilters('SELECT pr.id FROM packet_receipts pr', values, filters)
+            + ' ORDER BY pr.received_at DESC, pr.id DESC LIMIT ? OFFSET ?';
+        values.push(pageSize, (page - 1) * pageSize);
+        const [rows] = (page - 1) * pageSize >= total ? [[]] : await this.database.execute(
             `SELECT pr.id, pr.received_at, pr.client_ip, pr.client_port, pr.byte_count,
                     pr.parse_status, pr.parse_error,
                     COALESCE(d.device_uid, pr.source_device_uid) AS device_uid, d.meter_serial,
                     mc.device_cycle_number, mc.meter_ts_utc, mc.mode,
                     ir.voltage_l1_v, ir.current_l1_a, ir.active_import_w,
                     er.active_import_wh
-             FROM packet_receipts pr
+             FROM (${pageSql}) page
+             JOIN packet_receipts pr ON pr.id = page.id
              LEFT JOIN packet_cycle_links pcl ON pcl.receipt_id = pr.id
              LEFT JOIN measurement_cycles mc ON mc.id = pcl.cycle_id
              LEFT JOIN devices d ON d.id = mc.device_id
              LEFT JOIN instant_readings ir ON ir.cycle_id = mc.id
-             LEFT JOIN energy_readings er ON er.cycle_id = mc.id`,
+             LEFT JOIN energy_readings er ON er.cycle_id = mc.id
+             ORDER BY pr.received_at DESC, pr.id DESC`,
             values,
-            filters,
         );
-        sql += ' ORDER BY pr.received_at DESC, pr.id DESC LIMIT ? OFFSET ?';
-        values.push(pageSize, (page - 1) * pageSize);
-        const [rows] = await this.database.execute(sql, values);
 
         return {
             rows,
@@ -163,14 +163,17 @@ class DashboardRepository {
 
     async getDevices() {
         const [rows] = await this.database.execute(
+            // Per-device index lookups instead of joining every stored cycle.
             `SELECT d.device_uid, d.meter_serial, d.firmware,
-                    COUNT(mc.id) AS packet_count, MAX(mc.meter_ts_utc) AS last_meter_time,
-                    MAX(pr.received_at) AS last_received_at
+                    (SELECT COUNT(*) FROM measurement_cycles mc
+                       JOIN packet_cycle_links pcl ON pcl.cycle_id = mc.id
+                      WHERE mc.device_id = d.id) AS packet_count,
+                    (SELECT MAX(mc.meter_ts_utc) FROM measurement_cycles mc
+                      WHERE mc.device_id = d.id) AS last_meter_time,
+                    (SELECT pr.received_at FROM packet_receipts pr
+                      WHERE pr.source_device_uid = d.device_uid AND pr.parse_status = 'valid'
+                      ORDER BY pr.received_at DESC LIMIT 1) AS last_received_at
              FROM devices d
-             LEFT JOIN measurement_cycles mc ON mc.device_id = d.id
-             LEFT JOIN packet_cycle_links pcl ON pcl.cycle_id = mc.id
-             LEFT JOIN packet_receipts pr ON pr.id = pcl.receipt_id
-             GROUP BY d.id, d.device_uid, d.meter_serial, d.firmware
              ORDER BY d.device_uid`,
         );
         return rows;
@@ -197,16 +200,19 @@ class DashboardRepository {
                     mh.csq, mh.network_attached, mh.registration_status,
                     mh.last_send_success_seconds, mh.server_configured
              FROM devices d
-             LEFT JOIN measurement_cycles mc ON mc.device_id = d.id
-             LEFT JOIN packet_cycle_links pcl ON pcl.cycle_id = mc.id
-             LEFT JOIN packet_receipts pr ON pr.id = pcl.receipt_id
+             LEFT JOIN packet_receipts pr ON pr.id = (
+                SELECT latest.id FROM packet_receipts latest
+                WHERE latest.source_device_uid = d.device_uid AND latest.parse_status = 'valid'
+                ORDER BY latest.received_at DESC, latest.id DESC
+                LIMIT 1
+             )
+             LEFT JOIN packet_cycle_links pcl ON pcl.receipt_id = pr.id
+             LEFT JOIN measurement_cycles mc ON mc.id = pcl.cycle_id
              LEFT JOIN instant_readings ir ON ir.cycle_id = mc.id
              LEFT JOIN energy_readings er ON er.cycle_id = mc.id
              LEFT JOIN device_health dh ON dh.cycle_id = mc.id
              LEFT JOIN modem_health mh ON mh.cycle_id = mc.id
-             WHERE d.device_uid = ?
-             ORDER BY pr.received_at DESC, mc.id DESC
-             LIMIT 1`,
+             WHERE d.device_uid = ?`,
             [deviceId],
         );
         if (!rows[0]) return null;

@@ -305,6 +305,23 @@ const MIGRATIONS = [
                 description = VALUES(description)`,
         ],
     },
+    {
+        // Every receipt stored since migration 3 carries its device id. Fill it
+        // in for older receipts so dashboard filters can use packet_receipts
+        // alone, and index it with received_at for newest-first device lists.
+        version: 6,
+        statements: [
+            `UPDATE packet_receipts pr
+             JOIN packet_cycle_links pcl ON pcl.receipt_id = pr.id
+             JOIN measurement_cycles mc ON mc.id = pcl.cycle_id
+             JOIN devices d ON d.id = mc.device_id
+             SET pr.source_device_uid = d.device_uid
+             WHERE pr.source_device_uid IS NULL`,
+            `ALTER TABLE packet_receipts
+             DROP KEY idx_receipts_source_device,
+             ADD KEY idx_receipts_source_received (source_device_uid, received_at)`,
+        ],
+    },
 ];
 
 module.exports = { MIGRATIONS };

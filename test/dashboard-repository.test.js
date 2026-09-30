@@ -9,7 +9,7 @@ test('packet filters are passed as query parameters and pagination is bounded', 
     const database = {
         async execute(sql, values) {
             calls.push({ sql, values });
-            if (sql.includes('COUNT(*) AS total')) return [[{ total: 1 }]];
+            if (sql.includes('COUNT(*) AS total')) return [[{ total: 11 }]];
             return [[{ id: 9, device_uid: 'MRI-001' }]];
         },
     };
@@ -20,13 +20,30 @@ test('packet filters are passed as query parameters and pagination is bounded', 
     });
 
     assert.equal(result.pagination.page, 2);
-    assert.equal(result.pagination.total, 1);
+    assert.equal(result.pagination.total, 11);
     assert.equal(calls.length, 2);
     assert.equal(calls[0].sql.includes('MRI-001'), false);
     assert.equal(calls[0].values.includes('MRI-001'), true);
-    assert.match(calls[0].sql, /COALESCE\(d\.device_uid, pr\.source_device_uid\)/);
+    assert.match(calls[0].sql, /pr\.source_device_uid = \?/);
+    assert.doesNotMatch(calls[0].sql, /JOIN/);
+    assert.match(calls[1].sql, /FROM \(SELECT pr\.id FROM packet_receipts pr WHERE/);
     assert.match(calls[1].sql, /COALESCE\(d\.device_uid, pr\.source_device_uid\) AS device_uid/);
     assert.deepEqual(calls[1].values.slice(-2), [10, 10]);
+});
+
+test('skips the page query when the page is past the matching rows', async () => {
+    const calls = [];
+    const database = {
+        async execute(sql, values) {
+            calls.push({ sql, values });
+            return [[{ total: 0 }]];
+        },
+    };
+    const result = await new DashboardRepository(database).getPackets({ search: 'nothing' });
+
+    assert.deepEqual(result.rows, []);
+    assert.equal(result.pagination.total, 0);
+    assert.equal(calls.length, 1);
 });
 
 test('chart dimensions are selected only from validated values', async () => {
@@ -73,7 +90,7 @@ test('returns the latest detailed device overview', async () => {
     assert.equal(overview.device_uid, 'MRI-001');
     assert.equal(overview.ct_ratio, '1.000000');
     assert.equal(calls[0].values[0], 'MRI-001');
-    assert.match(calls[0].sql, /ORDER BY pr\.received_at DESC/);
+    assert.match(calls[0].sql, /ORDER BY latest\.received_at DESC/);
     assert.match(calls[0].sql, /LEFT JOIN device_health/);
     assert.match(calls[1].sql, /FROM cycle_configs/);
 });
