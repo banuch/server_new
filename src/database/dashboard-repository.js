@@ -452,6 +452,20 @@ class DashboardRepository {
             `SELECT received_at, source_device_uid, parse_status
              FROM packet_receipts ORDER BY received_at DESC, id DESC LIMIT 1`,
         );
+        // Packets per hour since local midnight, for the Home page activity bars.
+        const [hourRows] = await this.database.execute(
+            `SELECT FLOOR(TIMESTAMPDIFF(SECOND, ?, received_at) / 3600) AS hour_index,
+                    COUNT(*) AS packets, SUM(parse_status = 'invalid') AS rejected
+             FROM packet_receipts WHERE received_at >= ? GROUP BY hour_index`,
+            [dayStart, dayStart],
+        );
+        const packetsByHour = Array.from({ length: 24 }, () => ({ packets: 0, rejected: 0 }));
+        for (const row of hourRows) {
+            const slot = packetsByHour[Number(row.hour_index)];
+            if (!slot) continue;
+            slot.packets = Number(row.packets || 0);
+            slot.rejected = Number(row.rejected || 0);
+        }
 
         const attention = meters
             .filter((meter) => meter.status !== 'online' || meter.issues.length > 0)
@@ -471,6 +485,7 @@ class DashboardRepository {
             counts: { total: meters.length, ...counts },
             rejected_last_24h: Number(packetRow?.rejected_last_24h || 0),
             packets_today: Number(packetRow?.packets_today || 0),
+            packets_by_hour: packetsByHour,
             day_start: dayStart.toISOString(),
             last_packet: lastRows[0] || null,
             attention,

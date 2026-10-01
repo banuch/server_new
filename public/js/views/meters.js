@@ -16,9 +16,11 @@ const state = { search: '', status: '', manufacturer: '', sort: 'status', dir: '
 function applyRoute(route) {
     const search = route.params.get('search');
     const status = route.params.get('status');
-    if (search === null && status === null) return false;
+    const manufacturer = route.params.get('manufacturer');
+    if (search === null && status === null && manufacturer === null) return false;
     state.search = search || '';
     state.status = STATUS[status] ? status : '';
+    state.manufacturer = manufacturer || '';
     state.page = 1;
     return true;
 }

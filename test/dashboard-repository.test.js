@@ -62,6 +62,9 @@ test('fleet summary lists meters needing attention, most urgent first', async ()
             if (sql.includes('ORDER BY received_at DESC, id DESC LIMIT 1')) {
                 return [[{ received_at: minutesAgo(1), source_device_uid: 'A', parse_status: 'valid' }]];
             }
+            if (sql.includes('hour_index')) {
+                return [[{ hour_index: 0, packets: 12, rejected: '2' }, { hour_index: 5, packets: 28, rejected: 0 }, { hour_index: 30, packets: 1, rejected: 0 }]];
+            }
             return [[
                 meterRow({ device_uid: 'A' }),
                 meterRow({ device_uid: 'B', last_received_at: minutesAgo(15) }),
@@ -74,6 +77,10 @@ test('fleet summary lists meters needing attention, most urgent first', async ()
     assert.equal(fleet.counts.online, 1);
     assert.equal(fleet.rejected_last_24h, 3);
     assert.equal(fleet.packets_today, 40);
+    assert.equal(fleet.packets_by_hour.length, 24);
+    assert.deepEqual(fleet.packets_by_hour[0], { packets: 12, rejected: 2 });
+    assert.deepEqual(fleet.packets_by_hour[5], { packets: 28, rejected: 0 });
+    assert.deepEqual(calls.find((call) => call.sql.includes('hour_index')).values, [new Date('2026-09-29T18:30:00.000Z'), new Date('2026-09-29T18:30:00.000Z')]);
     assert.deepEqual(fleet.attention.map((meter) => meter.device_uid), ['C', 'B']);
     assert.equal(fleet.day_start, '2026-09-29T18:30:00.000Z');
     assert.equal(fleet.last_packet.source_device_uid, 'A');
