@@ -75,7 +75,7 @@ export function createFleetView(route, context) {
     return {
         mount(element) {
             root = element;
-            context.setCrumb('Fleet overview');
+            context.setCrumb('Home');
             root.innerHTML = LAYOUT;
             root.addEventListener('click', (event) => {
                 if (event.target.closest('[data-action=retry]')) context.reload('manual');
